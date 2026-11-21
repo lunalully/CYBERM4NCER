@@ -94,6 +94,37 @@ Install methods are metadata only in 0.1.0.
 Runs version detection for all manifests or the named tools. Exit code 1 if any
 tool is missing, incompatible or unverified.
 
+### `cyberm4ncer aggressive [targets...]`
+
+Plans (default) or runs the exhaustive repeated scan described in
+[`AGGRESSIVE_ENGINE.md`](AGGRESSIVE_ENGINE.md). Targets may be positional
+arguments or listed in `--file`, and the same scope policy is enforced for each.
+
+| Flag | Meaning |
+|---|---|
+| `--scope/-s` | Scope file |
+| `--file/-f` | File with one target per line (`#` comments allowed) |
+| `--mode` | `all`, `recon`, `enum`, `vuln` |
+| `--level` | 1..5 speed arguments |
+| `--repeat` | Cap per-invocation repetitions (0 keeps reviewed values) |
+| `--timeout` | Per-execution timeout |
+| `--execute` | Run the plan (default prints it) |
+| `--max-steps` | Stop after N executions (0 is unlimited) |
+| `--no-credentials` | Skip hydra/medusa |
+| `--no-intrusive` | Skip intrusive tools |
+| `--wordlist` | Web wordlist (default `execution.wordlist`) |
+| `--userlist`, `--passlist` | Credential lists for hydra/medusa |
+
+Exit codes: 0 success or plan-only, 1 error or scope denial, 130 interrupted.
+`--json` prints the plan or the campaign summary as JSON.
+
+```
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute
+cyberm4ncer aggressive https://app.example.com -s engagement.yaml --mode enum --repeat 3 --execute
+cyberm4ncer aggressive --file targets.txt -s engagement.yaml --max-steps 200 --execute
+```
+
 ## Planned commands
 
 These commands are **not registered** until their phases are complete:

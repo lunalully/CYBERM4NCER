@@ -32,6 +32,8 @@ type ExecutionConfig struct {
 	DefaultTimeout Duration `yaml:"default_timeout" json:"default_timeout"`
 	MaxOutputBytes int64    `yaml:"max_output_bytes" json:"max_output_bytes"`
 	PreviewBytes   int64    `yaml:"preview_bytes" json:"preview_bytes"`
+	// Wordlist is the default web wordlist used by aggressive runs.
+	Wordlist string `yaml:"wordlist" json:"wordlist"`
 }
 
 // LoggingConfig controls structured logging.
@@ -62,6 +64,7 @@ func Defaults() Config {
 			DefaultTimeout: Duration(10 * time.Minute),
 			MaxOutputBytes: 32 << 20, // 32 MiB per stream
 			PreviewBytes:   64 << 10, // 64 KiB kept in memory/database
+			Wordlist:       "/usr/share/wordlists/dirb/common.txt",
 		},
 		Logging: LoggingConfig{
 			Level:  "info",

@@ -34,6 +34,7 @@ execution:
   default_timeout: 10m          # 1s..24h
   max_output_bytes: 33554432    # 1 MiB..1 GiB, per stream
   preview_bytes: 65536          # 1 KiB..16 MiB, <= max_output_bytes
+  wordlist: /usr/share/wordlists/dirb/common.txt
 
 logging:
   level: info                   # debug, info, warn, error (file)
@@ -59,10 +60,14 @@ tools:
 | `CYBERM4NCER_LOG_FORMAT` | `logging.format` |
 | `CYBERM4NCER_SCOPE_FILE` | `scope.file` |
 | `CYBERM4NCER_WORKERS` | `execution.workers` |
+| `CYBERM4NCER_WORDLIST` | `execution.wordlist` |
 
 Environment variables do not expand inside path values. A leading `~` is
 expanded; other variables are left untouched so configuration cannot silently
 depend on ambient secrets.
+
+`execution.wordlist` is the default web wordlist for
+`cyberm4ncer aggressive`. `--wordlist` on the command line overrides it.
 
 ## Paths and permissions
 

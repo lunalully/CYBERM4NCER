@@ -31,9 +31,8 @@ invocations:
     args: ["-silent", "-td", "-title", "-status-code", "-tech-detect", "-json", "-o", "{{out}}"]
     repeat: 3
   - name: probe-all
-    description: Probes every captured web port as a URL.
+    description: Probes every captured web port as a URL and keeps them for later tools.
     mode: recon
     args: ["-silent", "-td", "-title", "-status-code", "-tech-detect", "-json", "-o", "{{out}}"]
     repeat: 3
     produces_urls: true
-

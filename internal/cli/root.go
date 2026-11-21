@@ -98,6 +98,7 @@ explicit scope file before a module can run.`,
 		newConfigCmd(opts),
 		newScopeCmd(opts),
 		newToolsCmd(opts),
+		newAggressiveCmd(opts),
 	)
 	return root
 }

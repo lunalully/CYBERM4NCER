@@ -1,8 +1,14 @@
 # Tools
 
-These are the external tools with validated manifests in 0.1.0. Detection and
-version checks work. Adapters (argument builders and parsers) are added in
-Phases 3–6.
+These are the external tools with validated manifests. Detection, version
+checks and reviewed invocations work; the aggressive engine runs them. Every
+manifest declares how it is addressed (`url`, `host`, `hostport`, `cidr`,
+`free`), its speed arguments, repetitions, captured-port expansion and
+credential success patterns.
+
+Additional manifests: wafw00f, telnet, nc (netcat), hydra, medusa, masscan,
+rustscan, dirb, dirsearch, whatweb, nxc (NetExec), enum4linux-ng, dalfox,
+arjun and wpscan.
 
 | Tool | Category | Min | Tested | Risk | Intrusive |
 |---|---|---|---|---|---|

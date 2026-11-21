@@ -13,8 +13,8 @@ vulnerability assessment, execution history, normalized results and reporting.
 
 ## Status
 
-**0.1.0-dev — Core foundation (Phase 2).** This is an engineering preview, not
-a complete scanning platform. The project is intentionally honest about what
+**0.2.0-dev — Core foundation plus the aggressive engine.** This is an
+engineering preview, not a complete scanning platform. The project is intentionally honest about what
 exists:
 
 | Capability | Status |
@@ -24,7 +24,8 @@ exists:
 | Tamper-evident audit log | Implemented |
 | Scope engine (host, URL, IP, CIDR, redirects) | Implemented |
 | Execution engine (timeout, cancellation, process groups) | Implemented |
-| Tool registry and version detection (15 manifests) | Implemented |
+| Tool registry and version detection (30 manifests with reviewed invocations) | Implemented |
+| Aggressive engine (repeated runs, port chaining, reporting) | Implemented |
 | Normalized result model and deduplication fingerprint | Model implemented |
 | Tool installation / update / removal | Phase 3 |
 | Result parsers and persistence | Phase 4 |
@@ -74,6 +75,8 @@ cyberm4ncer tools list
 cyberm4ncer tools detect
 cyberm4ncer scope validate engagement.yaml
 cyberm4ncer scope check app.example.com --file engagement.yaml
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml          # plan only
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute # run
 ```
 
 A scope file must be explicit:
@@ -96,8 +99,8 @@ See [`docs/SCOPE_ENGINE.md`](docs/SCOPE_ENGINE.md) for exact semantics.
 
 ## Architecture
 
-CYBERM4NCER separates configuration, scope, execution, persistence and tool
-metadata. Modules never build their own process runners or loggers; they use
+CYBERM4NCER separates configuration, scope, execution, persistence, aggressive
+orchestration and tool metadata. Modules never build their own process runners or loggers; they use
 the core services.
 
 ```
@@ -111,6 +114,7 @@ internal/scope       Authorization policy and redirect guard
 internal/execution   Safe external process execution
 internal/tools       Tool manifests, registry and version detection
 internal/results     Normalized finding model and fingerprint
+internal/aggressive  Plan expansion, repetition, asset chaining, reporting
 ```
 
 Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the

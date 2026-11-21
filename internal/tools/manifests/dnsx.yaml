@@ -27,11 +27,10 @@ invocations:
   - name: brute
     description: Brute-forces subdomains with the built-in wordlist.
     mode: enum
-    args: ["-silent", "-a", "-resp", "-bruteforce"]
+    args: ["-silent", "-a", "-resp", "-w", "{{wordlist}}"]
     repeat: 3
     options:
       - {name: domain, flag: "-d"}
-      - {name: wordlist, flag: "-w"}
   - name: resolve
     description: Resolves names and records A records.
     mode: recon

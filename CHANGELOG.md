@@ -9,6 +9,19 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Aggressive engine: expanded plans, repeated rounds, per-port fan-out, report
+  parsing, credential match reporting and operation/audit records.
+- `cyberm4ncer aggressive` command with plan-by-default and `--execute`.
+- 15 new manifests (wafw00f, telnet, nc, hydra, medusa, masscan, rustscan,
+  dirb, dirsearch, whatweb, nxc, enum4linux-ng, dalfox, arjun, wpscan) and
+  reviewed invocations for every existing manifest.
+- Execution engine accepts expected exit codes from reviewed invocations.
+- Multiple targets per run (`--file`), `--max-steps` campaign cap, `--wordlist`,
+  `--userlist` and `--passlist` flags.
+- `execution.wordlist` configuration and `CYBERM4NCER_WORDLIST` override.
+- Asset capture hardening: help screens, stack traces, documentation prose and
+  vendor domains are ignored; open ports are attributed to the scanned host.
+
 - Cobra CLI with `version`, `doctor`, `config`, `scope` and `tools`.
 - Layered configuration: defaults, YAML, environment, CLI flags.
 - JSON and text output modes with terminal-aware color.

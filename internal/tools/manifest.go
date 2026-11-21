@@ -270,6 +270,9 @@ func (m *Manifest) Compile() error {
 		if inv.UsesCapturedPorts && m.Usage.TargetMode != "hostport" {
 			errs = append(errs, fmt.Errorf("%s: invocation %q uses captured ports but target_mode is %q", m.Name, inv.Name, m.Usage.TargetMode))
 		}
+		if inv.UsesCapturedPorts && inv.PortDiscovery {
+			errs = append(errs, fmt.Errorf("%s: invocation %q cannot both discover and consume ports", m.Name, inv.Name))
+		}
 		if inv.PortDiscovery && m.Usage.TargetMode != "cidr" && m.Usage.TargetMode != "host" {
 			errs = append(errs, fmt.Errorf("%s: invocation %q performs port discovery but target_mode is %q", m.Name, inv.Name, m.Usage.TargetMode))
 		}

@@ -3,7 +3,7 @@
 Versions are planning targets, not promises. A phase is complete only when its
 code, tests and documentation are present and the repository checks pass.
 
-## 0.1.0 — Core foundation (current, `0.1.0-dev`)
+## 0.1.0 — Core foundation (delivered, `0.1.0-dev`)
 
 - [x] Cobra CLI and consistent exit codes
 - [x] Layered configuration and validation
@@ -15,7 +15,20 @@ code, tests and documentation are present and the repository checks pass.
 - [x] Result model and fingerprint
 - [x] Unit tests and core documentation
 
-## 0.2.0 — Tool Manager (Phase 3)
+## 0.2.0 — Aggressive Engine (delivered, `0.2.0-dev`)
+
+- [x] Plan expansion per tool/invocation/mode
+- [x] Repeated rounds with level-based speed arguments
+- [x] Port discovery chaining into per-port steps
+- [x] Report parsing for stdout, JSON/JSONL and report files
+- [x] Credential success detection and reporting
+- [x] Operation and audit records for every run
+- [x] Multiple targets per run and `--max-steps` campaign cap
+- [x] Wordlist/credential list plumbing (`--wordlist`, `--userlist`, `--passlist`)
+- [ ] Concurrent execution and resume
+- [ ] Per-tool result parsers (Result Engine)
+
+## 0.3.0 — Tool Manager (next phase)
 
 - [ ] Declarative, reviewed install methods
 - [ ] Checksums and signature verification for downloads

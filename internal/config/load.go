@@ -147,6 +147,9 @@ func applyEnv(cfg *Config) error {
 	if v := strings.TrimSpace(os.Getenv("CYBERM4NCER_SCOPE_FILE")); v != "" {
 		cfg.Scope.File = v
 	}
+	if v := strings.TrimSpace(os.Getenv("CYBERM4NCER_WORDLIST")); v != "" {
+		cfg.Execution.Wordlist = v
+	}
 	if v := strings.TrimSpace(os.Getenv("CYBERM4NCER_WORKERS")); v != "" {
 		workers, err := strconv.Atoi(v)
 		if err != nil {

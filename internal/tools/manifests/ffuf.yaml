@@ -43,6 +43,6 @@ invocations:
     repeat: 3
     options:
       - {name: url, flag: "-u"}
-      - {name: vhost, flag: "-H", value: "Host: FUZZ"}
+      - {name: hostheader, flag: "-H", value: "Host: FUZZ"}
       - {name: wordlist, flag: "-w"}
 
