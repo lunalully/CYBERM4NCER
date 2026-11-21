@@ -1,0 +1,22 @@
+name: nikto
+description: Web server misconfiguration and known-issue scanner.
+category: vulnerability
+homepage: https://github.com/sullo/nikto
+documentation: https://github.com/sullo/nikto/wiki
+license: GPL-2.0
+binary: nikto
+min_version: 2.1.5
+tested_version: 2.1.5
+architectures: [any]
+risk: medium
+intrusive: true
+capabilities: [misconfiguration_assessment, web_server_scanning]
+outputs: [text, json, csv, xml]
+version_check:
+  args: ["-Version"]
+  regex: '(?i)Nikto main\s+([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: apt
+    package: nikto
+  - method: manual
+    notes: Use the distribution package or the official reviewed release.

@@ -1,0 +1,22 @@
+name: subfinder
+description: Passive subdomain discovery from public sources.
+category: recon
+homepage: https://github.com/projectdiscovery/subfinder
+documentation: https://docs.projectdiscovery.io/tools/subfinder/overview
+license: MIT
+binary: subfinder
+min_version: 2.6.0
+tested_version: 2.17.0
+architectures: [amd64, arm64, 386, arm]
+risk: low
+intrusive: false
+capabilities: [subdomain_discovery, passive_recon]
+outputs: [text, jsonl]
+version_check:
+  args: ["-version"]
+  regex: '(?i)current version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

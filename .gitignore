@@ -1,0 +1,32 @@
+# Binaries
+/dist/
+/bin/
+/cyberm4ncer
+
+# Test and coverage output
+coverage.out
+*.test
+*.prof
+
+# Runtime data, evidence and local scopes
+*.db
+*.db-shm
+*.db-wal
+*.log
+/.cyberm4ncer/
+/artifacts/
+configs/scope.local.yaml
+
+# Secrets and local environment
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

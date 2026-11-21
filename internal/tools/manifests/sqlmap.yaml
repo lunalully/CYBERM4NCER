@@ -1,0 +1,23 @@
+name: sqlmap
+description: Detection and exploitation of SQL injection (explicitly gated).
+category: vulnerability
+homepage: https://sqlmap.org/
+documentation: https://github.com/sqlmapproject/sqlmap/wiki
+license: GPL-2.0
+binary: sqlmap
+min_version: 1.8.0
+tested_version: 1.9.6
+architectures: [any]
+risk: high
+intrusive: true
+capabilities: [sql_injection_detection, sql_injection_exploitation]
+outputs: [text, csv]
+version_check:
+  args: ["--version"]
+  regex: '([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: apt
+    package: sqlmap
+  - method: manual
+    notes: Use the distribution package or a reviewed official release.
+notes: Exploitation options require explicit operator confirmation and are never part of automatic profiles.

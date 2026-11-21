@@ -1,0 +1,24 @@
+name: gobuster
+description: Directory, vhost and DNS enumeration.
+category: web
+homepage: https://github.com/OJ/gobuster
+documentation: https://github.com/OJ/gobuster
+license: Apache-2.0
+binary: gobuster
+min_version: 3.6.0
+tested_version: 3.6.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [directory_enumeration, vhost_discovery, dns_enumeration]
+outputs: [text]
+version_check:
+  args: ["version"]
+  regex: '(?m)^v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)$'
+install:
+  - method: go
+    package: github.com/OJ/gobuster/v3@v3.6.0
+  - method: apt
+    package: gobuster
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

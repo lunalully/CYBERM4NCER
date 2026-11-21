@@ -1,0 +1,24 @@
+version: 1
+data_dir: ""
+
+database:
+  path: ""
+
+execution:
+  workers: 4
+  default_timeout: 10m
+  max_output_bytes: 33554432
+  preview_bytes: 65536
+
+logging:
+  level: info
+  format: text
+  file: ""
+
+scope:
+  file: ""
+
+tools:
+  dir: ""
+  version_timeout: 5s
+  detect_concurrency: 4

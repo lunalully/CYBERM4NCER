@@ -1,0 +1,25 @@
+# Example scope. Copy this file, then replace every rule with assets you are
+# explicitly authorized to test. This file is a schema example, not
+# authorization by itself.
+
+version: 1
+project: replace-me
+authorization: "REPLACE: engagement ID, authorizing party, scope owner and validity dates"
+
+includes:
+  - domain: example.com
+    subdomains: true
+    comment: Replace with the authorized apex domain.
+  - ip: 203.0.113.10
+    comment: Documentation range examples only.
+  - cidr: 203.0.113.0/24
+    comment: Replace with an authorized range. Keep it as narrow as possible.
+
+excludes:
+  - domain: billing.example.com
+    subdomains: true
+    comment: Example of an excluded payment system.
+  - cidr: 203.0.113.128/25
+    comment: Example exclusion that makes 203.0.113.0/24 only partially scoped.
+
+ports: [80, 443]

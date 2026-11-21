@@ -1,0 +1,22 @@
+name: katana
+description: Web crawler for endpoint and JavaScript discovery.
+category: web
+homepage: https://github.com/projectdiscovery/katana
+documentation: https://docs.projectdiscovery.io/tools/katana/overview
+license: MIT
+binary: katana
+min_version: 1.1.0
+tested_version: 1.8.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [web_crawling, endpoint_discovery]
+outputs: [text, jsonl]
+version_check:
+  args: ["-version"]
+  regex: '(?i)current version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/projectdiscovery/katana/cmd/katana@v1.8.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

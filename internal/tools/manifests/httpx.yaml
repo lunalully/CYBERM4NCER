@@ -1,0 +1,22 @@
+name: httpx
+description: HTTP probing, status analysis and technology fingerprinting.
+category: recon
+homepage: https://github.com/projectdiscovery/httpx
+documentation: https://docs.projectdiscovery.io/tools/httpx/overview
+license: MIT
+binary: httpx
+min_version: 1.6.0
+tested_version: 1.12.0
+architectures: [amd64, arm64, 386, arm]
+risk: low
+intrusive: false
+capabilities: [http_probing, technology_fingerprinting, asset_inventory]
+outputs: [text, jsonl]
+version_check:
+  args: ["-version"]
+  regex: '(?i)current version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

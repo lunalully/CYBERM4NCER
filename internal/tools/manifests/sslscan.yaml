@@ -1,0 +1,22 @@
+name: sslscan
+description: TLS configuration and cipher assessment.
+category: vulnerability
+homepage: https://github.com/rbsec/sslscan
+documentation: https://github.com/rbsec/sslscan
+license: GPL-3.0
+binary: sslscan
+min_version: 2.1.0
+tested_version: 2.1.5
+architectures: [any]
+risk: low
+intrusive: false
+capabilities: [tls_assessment, cipher_enumeration]
+outputs: [text, xml]
+version_check:
+  args: ["--version"]
+  regex: '([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: apt
+    package: sslscan
+  - method: manual
+    notes: Use the distribution package or the official reviewed release.

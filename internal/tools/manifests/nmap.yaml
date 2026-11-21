@@ -1,0 +1,22 @@
+name: nmap
+description: Port scanning, service detection and network enumeration.
+category: network
+homepage: https://nmap.org/
+documentation: https://nmap.org/book/man.html
+license: NPSL
+binary: nmap
+min_version: 7.90
+tested_version: 7.95
+architectures: [amd64, arm64]
+risk: medium
+intrusive: true
+capabilities: [port_discovery, service_fingerprinting, network_enumeration]
+outputs: [text, xml]
+version_check:
+  args: ["--version"]
+  regex: '(?i)nmap version\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: apt
+    package: nmap
+  - method: manual
+    notes: Use the distribution package or the official reviewed release.

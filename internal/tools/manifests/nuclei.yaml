@@ -1,0 +1,22 @@
+name: nuclei
+description: Template-based vulnerability and misconfiguration scanning.
+category: vulnerability
+homepage: https://github.com/projectdiscovery/nuclei
+documentation: https://docs.projectdiscovery.io/tools/nuclei/overview
+license: MIT
+binary: nuclei
+min_version: 3.0.0
+tested_version: 3.11.1
+architectures: [amd64, arm64, 386, arm]
+risk: high
+intrusive: true
+capabilities: [vulnerability_detection, misconfiguration_assessment, template_scanning]
+outputs: [text, jsonl, json, sarif]
+version_check:
+  args: ["-version"]
+  regex: '(?i)(?:nuclei engine version|current version):\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1
+  - method: manual
+    notes: Build from a reviewed release of the official repository. Template updates are a separate explicit action.

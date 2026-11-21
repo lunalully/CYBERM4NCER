@@ -1,0 +1,22 @@
+name: ffuf
+description: Fast web fuzzer for content and parameter discovery.
+category: web
+homepage: https://github.com/ffuf/ffuf
+documentation: https://github.com/ffuf/ffuf/wiki
+license: Apache-2.0
+binary: ffuf
+min_version: 2.1.0
+tested_version: 2.1.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [content_discovery, parameter_fuzzing, directory_enumeration]
+outputs: [text, json, csv, html]
+version_check:
+  args: ["-V"]
+  regex: '(?i)ffuf version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/ffuf/ffuf/v2@v2.1.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

@@ -1,0 +1,22 @@
+name: naabu
+description: Fast port discovery for network reconnaissance.
+category: network
+homepage: https://github.com/projectdiscovery/naabu
+documentation: https://docs.projectdiscovery.io/tools/naabu/overview
+license: MIT
+binary: naabu
+min_version: 2.3.0
+tested_version: 2.7.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [port_discovery]
+outputs: [text, jsonl]
+version_check:
+  args: ["-version"]
+  regex: '(?i)current version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.7.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

@@ -1,0 +1,23 @@
+name: testssl
+description: TLS/SSL vulnerability and protocol assessment.
+category: vulnerability
+homepage: https://testssl.sh/
+documentation: https://testssl.sh/doc/
+license: GPL-2.0
+binary: testssl
+min_version: 3.2.0
+tested_version: 3.2.1
+architectures: [any]
+risk: low
+intrusive: false
+capabilities: [tls_assessment, protocol_analysis, certificate_analysis]
+outputs: [text, json, html]
+version_check:
+  args: ["--version"]
+  regex: '(?i)testssl.*?version.*?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: github_release
+    repository: https://github.com/drwetter/testssl.sh
+    notes: Verify release checksums before installation.
+  - method: manual
+    notes: Use a reviewed release of the official repository.

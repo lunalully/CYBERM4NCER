@@ -1,0 +1,24 @@
+name: amass
+description: Attack-surface mapping and DNS enumeration.
+category: recon
+homepage: https://github.com/owasp-amass/amass
+documentation: https://owasp-amass.github.io/
+license: Apache-2.0
+binary: amass
+min_version: 4.0.0
+tested_version: 4.2.0
+architectures: [amd64, arm64]
+risk: low
+intrusive: false
+capabilities: [subdomain_discovery, dns_enumeration, asset_mapping]
+outputs: [text, json]
+version_check:
+  args: ["-version"]
+  regex: '(?i)v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/owasp-amass/amass/v4/cmd/amass@v4.2.0
+  - method: apt
+    package: amass
+  - method: manual
+    notes: Build from a reviewed release of the official repository.

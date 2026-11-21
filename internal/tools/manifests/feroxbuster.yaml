@@ -1,0 +1,26 @@
+name: feroxbuster
+description: Recursive content discovery and directory enumeration.
+category: web
+homepage: https://github.com/epi052/feroxbuster
+documentation: https://epi052.github.io/feroxbuster-docs/
+license: MIT
+binary: feroxbuster
+min_version: 2.10.0
+tested_version: 2.13.1
+architectures: [amd64, arm64]
+risk: medium
+intrusive: true
+capabilities: [content_discovery, directory_enumeration]
+outputs: [text, json]
+version_check:
+  args: ["--version"]
+  regex: '(?i)feroxbuster\s+v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: github_release
+    repository: https://github.com/epi052/feroxbuster
+    notes: Verify release checksums before installation.
+  - method: cargo
+    package: feroxbuster
+    notes: Pin the tested release with cargo install feroxbuster --version 2.13.1.
+  - method: manual
+    notes: Build from a reviewed release of the official repository.
