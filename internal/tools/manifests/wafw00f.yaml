@@ -24,7 +24,7 @@ install:
     notes: Install from the official repository (PyPI package wafw00f).
 usage:
   target_mode: url
-  target_flags: ["-a"]
+  target_flags: []
   url_paths: ["/"]
 invocations:
   - name: full-detection

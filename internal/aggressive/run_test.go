@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/lunalully/cyberm4ncer/internal/execution"
+	"github.com/lunalully/cyberm4ncer/internal/scope"
 	"github.com/lunalully/cyberm4ncer/internal/tools"
 )
 
@@ -61,11 +63,15 @@ func (f *fakePerformer) run(ctx context.Context, req execution.Request) (executi
 
 func fakeScoped(target string) bool {
 	host := target
-	if index := strings.LastIndex(target, ":"); index > 0 && !strings.HasSuffix(target, "]") {
-		host = target[:index]
+	if strings.Contains(host, "://") {
+		if parsed, err := url.Parse(host); err == nil {
+			host = parsed.Hostname()
+		}
+	} else if index := strings.LastIndex(host, ":"); index > 0 && !strings.HasSuffix(host, "]") {
+		host = host[:index]
 	}
 	host = strings.Trim(host, "[]")
-	return host == "127.0.0.1" || host == "app.example.com" || strings.HasSuffix(host, ".example.com")
+	return host == "127.0.0.1" || host == "app.example.com" || host == "example.com" || strings.HasSuffix(host, ".example.com")
 }
 
 // fakeRegistry writes minimal manifests for shell stand-ins.
@@ -355,5 +361,129 @@ func TestExecutorOnlyExpandsProvenOpenPorts(t *testing.T) {
 	}
 	if !strings.Contains(progress.String(), "banner on 127.0.0.1:8080") {
 		t.Fatalf("open port was not expanded:\n%s", progress.String())
+	}
+}
+
+func planStep(t *testing.T, plan *Plan, tool, invocation string) Step {
+	t.Helper()
+	for _, step := range plan.Steps {
+		if step.Tool == tool && step.Invocation == invocation && step.Round == 1 {
+			return step
+		}
+	}
+	t.Fatalf("step %s/%s not found", tool, invocation)
+	return Step{}
+}
+
+func TestRunStepSendsHostAndPortSeparately(t *testing.T) {
+	registry := mustRegistry(t)
+	planner := &Planner{Registry: registry, Mode: DefaultMode()}
+	plan, err := planner.Plan("127.0.0.1", mustPolicy(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	performer := &fakePerformer{}
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	report := func(string, ...any) {}
+	cases := []struct {
+		tool, invocation string
+		want             []string
+	}{
+		{"nc", "banner", []string{"-v", "-w", "3", "127.0.0.1", "445"}},
+		{"telnet", "banner", []string{"127.0.0.1", "445"}},
+	}
+	for _, test := range cases {
+		step := planStep(t, plan, test.tool, test.invocation)
+		step.Target = "127.0.0.1:445"
+		step.Port = 445
+		step.TargetURL = ""
+		result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, report)
+		if result.Error != "" {
+			t.Fatalf("%s: %s", test.tool, result.Error)
+		}
+		requests := performer.requests()
+		args := requests[len(requests)-1].Args
+		if strings.Join(args, " ") != strings.Join(test.want, " ") {
+			t.Fatalf("%s argv = %q, want %q", test.tool, args, test.want)
+		}
+	}
+}
+
+func TestRunStepURLToolGetsSchemeAndPort(t *testing.T) {
+	registry := mustRegistry(t)
+	planner := &Planner{Registry: registry, Mode: DefaultMode()}
+	policy, err := scope.Parse([]byte(`
+version: 1
+project: url-tool
+authorization: "unit test"
+includes:
+  - ip: 127.0.0.1
+ports: [8081]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := planner.Plan("http://127.0.0.1:8081", policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	performer := &fakePerformer{}
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	step := planStep(t, plan, "ffuf", "dir-enum")
+	var log strings.Builder
+	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, func(format string, args ...any) {
+		fmt.Fprintf(&log, format+"\n", args...)
+	})
+	if result.Error != "" {
+		t.Fatalf("%s\n%s", result.Error, log.String())
+	}
+	requests := performer.requests()
+	args := requests[len(requests)-1].Args
+	found := false
+	for i, arg := range args {
+		if arg == "-u" && i+1 < len(args) {
+			found = true
+			if args[i+1] != "http://127.0.0.1:8081" {
+				t.Fatalf("ffuf -u value = %q", args[i+1])
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("ffuf argv has no -u target: %q", args)
+	}
+}
+
+func TestRunStepURLToolOnBareHostIsPortChecked(t *testing.T) {
+	// Port 80 is not allowed by this scope, so a URL tool planned on a bare
+	// host must be refused instead of connecting to the implied port.
+	policy, err := scope.Parse([]byte(`
+version: 1
+project: port-check
+authorization: "unit test"
+includes:
+  - ip: 127.0.0.1
+ports: [445]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry := mustRegistry(t)
+	planner := &Planner{Registry: registry, Mode: DefaultMode()}
+	plan, err := planner.Plan("127.0.0.1", policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	performer := &fakePerformer{}
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	step := planStep(t, plan, "ffuf", "dir-enum")
+	var log strings.Builder
+	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, func(format string, args ...any) {
+		fmt.Fprintf(&log, format+"\n", args...)
+	})
+	if !result.Skipped || !strings.Contains(result.Error, "port 80") {
+		t.Fatalf("result = %+v\n%s", result, log.String())
+	}
+	if performer.calls.Load() != 0 {
+		t.Fatal("process started for an out-of-scope implied port")
 	}
 }

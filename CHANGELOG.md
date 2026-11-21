@@ -19,6 +19,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
   `Current Version:` line; all 30 tools are detected as ready on the lab host.
 - ffuf/gobuster/amass/subfinder/medusa reviewed invocations now pass the
   target; whatweb uses its positional target (`--url` is ambiguous).
+- Per-port tools receive host and port as two positional arguments:
+  `nc -v -w 3 127.0.0.1 445`, `telnet 127.0.0.1 445`, `sslscan 127.0.0.1:445`.
+- ffuf and gobuster receive a full URL (`http://127.0.0.1:8081`), not a bare
+  host, and URL tools planned on a bare host are checked against the implied
+  port (80/443) before they run.
+- `wafw00f` takes its target positionally (`-a` means aggressive mode).
+- The reviewed target flag is never added when the argv already carries
+  `{{host}}`, `{{hostport}}` or `{{url}}`.
 
 ### Added
 

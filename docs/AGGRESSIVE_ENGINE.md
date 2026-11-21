@@ -55,6 +55,12 @@ the one the manifest asked for:
 A flag without a value is never passed on its own, and an argument whose
 placeholder has no value is dropped instead of being executed literally.
 
+When the argv already carries `{{host}}`, `{{hostport}}` or `{{url}}`, the
+reviewed target flag (`-u`, `-d`, `--url`) is not added again. URL tools
+always receive a full URL with the operator's scheme and port (`ffuf -u
+http://127.0.0.1:8081`); planned on a bare host they are checked against the
+port they imply (80 for `http`, 443 for `https`) before running.
+
 ### Flags
 
 | Flag | Meaning |
@@ -86,9 +92,11 @@ included by default. Removing them is the operator's explicit choice.
    **open** port for each planned round. A port only counts as open when a
    scanner explicitly reported it (`80/tcp open`, `Discovered open port`,
    `"port":8080`); mentions in prose or banners never trigger a connection.
-   Each expanded step carries `host:port` as its target, while port-first
-   tools (`nc`, `telnet`, `sslscan`, `testssl`) pass host and port separately
-   as reviewed in their manifests.
+   Each expanded step carries `host:port` as its target; the manifest decides
+   how the tool receives it. `nc` and `telnet` take two positional arguments
+   (`nc -v -w 3 127.0.0.1 445`, `telnet 127.0.0.1 445`), while `sslscan` and
+   `testssl` take `host:port`. Every address named in the final argv is
+   checked against the scope before the process starts.
 5. **URL production.** Steps with `produces_urls: true` convert captured web
    ports into `http(s)://host[:port]/` URLs; URL-targeted tools receive them
    through their reviewed flag such as `-u`.

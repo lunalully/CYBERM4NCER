@@ -29,8 +29,8 @@ invocations:
   - name: banner
     description: Opens a raw TCP connection per port to capture a service banner.
     mode: enum
-    # {{host:port}} is the target, then the positional port.
-    args: ["-v", "-w", "3"]
+    # The target and its port are two positional arguments.
+    args: ["-v", "-w", "3", "{{host}}", "{{port}}"]
     repeat: 3
     uses_captured_ports: true
     accept_exit_codes: [0, 1]

@@ -82,7 +82,11 @@ func TestPlanExpandsRepeatedInvocations(t *testing.T) {
 	}
 	for _, step := range plan.Steps {
 		for _, arg := range step.Args {
-			if strings.Contains(arg, "{{") && !strings.Contains(arg, "{{out}}") && !strings.Contains(arg, "{{wordlist}}") && !strings.Contains(arg, "{{url}}") && !strings.Contains(arg, "{{host}}") && !strings.Contains(arg, "{{default_port}}") && !strings.Contains(arg, "{{host:port}}") {
+			// {{port}} is only known when a captured open port is expanded.
+			if step.Expand && strings.TrimSpace(arg) == "{{port}}" {
+				continue
+			}
+			if strings.Contains(arg, "{{") && !strings.Contains(arg, "{{out}}") && !strings.Contains(arg, "{{wordlist}}") && !strings.Contains(arg, "{{url}}") && !strings.Contains(arg, "{{host}}") && !strings.Contains(arg, "{{default_port}}") {
 				t.Fatalf("%s/%s left an unresolved template in args: %q", step.Tool, step.Invocation, arg)
 			}
 		}

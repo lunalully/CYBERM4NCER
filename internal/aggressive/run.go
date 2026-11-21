@@ -224,49 +224,37 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		target = plan.Target
 	}
 	values := StepContext(step, "")
-	values.Target = target
 	values.Options = copiedValues(values.Options)
+	values.Target = target
 	if step.Port > 0 {
 		// Expanded steps carry the host alone; the port lives separately.
 		values.Port = step.Port
 		values.HostPort = fmt.Sprintf("%s:%d", values.Host, step.Port)
 	}
-	// Any remaining {{default_port}} placeholder receives the reviewed
-	// conventional port of the step; the scope still checks that port below.
-	if step.Port == 0 && values.Options[KeyDefaultPort] == "" && step.OptionValues[KeyDefaultPort] != "" {
-		if len(unresolvedKeys(step.Args, valuesForDefaultPort(values, step.OptionValues[KeyDefaultPort]))) > 0 {
-			values.Options[KeyDefaultPort] = step.OptionValues[KeyDefaultPort]
-		}
+	spec := specFor(plan.Registry, step)
+	scheme := parsedScheme(plan.TargetURL)
+	// Service tools carry their conventional protocol port as a reviewed
+	// option; the scope still checks that port below.
+	if step.OptionValues[KeyDefaultPort] != "" {
+		values.Options[KeyDefaultPort] = step.OptionValues[KeyDefaultPort]
 	}
-	if step.Port > 0 && step.Expand {
-		// Expanded steps pass host and port separately; on a bare host the
-		// port placeholder falls back to the listed default port.
-		values.Options[KeyPort] = fmt.Sprint(values.Port)
+	// The port this step contacts and the form its tool expects.
+	effectivePort := step.Port
+	kind := targetKind(spec, step)
+	urlOption := hasURLOption(step)
+	if effectivePort == 0 && (kind == "hostport" || kind == "url" || urlOption) {
+		effectivePort = values.Port
 	}
-	// The reviewed target flag receives the address the tool will scan:
-	// host:port (or the raw target) for host/CIDR/port tools, and the URL for
-	// tools that were reviewed for one.
-	targetArg := reviewedTargetPlaceholder(plan, step)
-	// Addressed tools receive that address in their reviewed flag.
-	toolURL := targetArg
-	// The target is available to templates and option values from the start;
-	// expanded steps may refine it once their port is known.
-	if step.Port == 0 {
-		values.Target = targetArg
-		values.Options[KeyTarget] = targetArg
-	}
-	// Service tools (hydra, medusa) need the port passed once, as the value
-	// of their reviewed port flag; the address itself stays bare. A step on a
-	// bare host uses the conventional port of its protocol, which the scope
-	// must allow (set further below, before the arguments are built).
-	if step.Port > 0 {
-		values.Options[KeyDefaultPort] = fmt.Sprint(step.Port)
-	}
-	// Tools whose target goes in a flag named after the address itself take
-	// the address the step actually scans (a URL for URL targets).
-	for name := range step.OptionFlags {
-		if strings.EqualFold(name, KeyURL) || strings.EqualFold(name, "url") {
-			values.Options[name] = targetArg
+	targetValue := targetArg(values.Host, effectivePort, kind, scheme)
+	values.Target = targetValue
+	values.Options[KeyTarget] = targetValue
+	// URL tools take the full URL, including the operator's scheme and port.
+	if kind == "url" || urlOption {
+		urlValue := buildURLWithScheme(values.Host, effectivePort, scheme)
+		for name := range step.OptionFlags {
+			if strings.EqualFold(name, KeyURL) || strings.EqualFold(name, "url") {
+				values.Options[name] = urlValue
+			}
 		}
 	}
 	// The operator's wordlist applies to every option of that name.
@@ -285,43 +273,6 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 			}
 		}
 	}
-
-	// URLs are re-checked like any other asset; a URL built from a discovered
-	// host must not escape the scope.
-	scopeTarget := target
-	if step.Port > 0 {
-		// An expanded step addresses host:port; the port is never added twice.
-		scopeTarget = fmt.Sprintf("%s:%d", values.Host, step.Port)
-	} else if _, portInURL := parsePortInURL(toolURL); portInURL {
-		scopeTarget = toolURL
-	} else if scheme := parsedScheme(toolURL); scheme != "" {
-		// A URL without an explicit port is checked with the port it implies
-		// (80 for http, 443 for https), so port-restricted scopes still apply.
-		implied := 80
-		if scheme == "https" {
-			implied = 443
-		}
-		scopeTarget = fmt.Sprintf("%s:%d", values.Host, implied)
-	}
-	if step.Port == 0 && step.AllowConventionalPort != 0 {
-		// A service step planned on the conventional port of its protocol
-		// contacts that port; the scope decides whether it may be tried.
-		// The flag is added below, after this check.
-		scopeTarget = fmt.Sprintf("%s:%d", values.Host, step.AllowConventionalPort)
-		if decision, err := plan.Policy.CheckTarget(scopeTarget); err != nil || !decision.Allowed {
-			reason := "invalid target"
-			if err == nil {
-				reason = decision.Reason
-			}
-			report("%s/%s: refused, %s", step.Tool, step.Invocation, reason)
-			return StepResult{Step: step, Target: target, Skipped: true, Error: "scope denied: " + reason}
-		}
-		values.Options[KeyDefaultPort] = fmt.Sprint(step.AllowConventionalPort)
-	}
-	// Context options are filled in place: buildArgs and the validity check
-	// both read this map.
-	values.Options[KeyTarget] = targetArg
-	values.Target = targetArg
 	if missing := unresolvedServiceOptions(step, values); len(missing) > 0 {
 		report("%s/%s: skipped, missing option(s) %s", step.Tool, step.Invocation, strings.Join(missing, ", "))
 		return StepResult{Step: step, Target: target, Skipped: true, Error: "missing option: " + strings.Join(missing, ",")}
@@ -335,23 +286,36 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 			return StepResult{Step: step, Target: target, Skipped: true, Error: "create report directory: " + err.Error()}
 		}
 	}
-
-	if decision, err := plan.Policy.CheckTarget(scopeTarget); err != nil || !decision.Allowed {
-		reason := "invalid target"
-		if err == nil {
-			reason = decision.Reason
+	// Every address the command contacts is checked before the process
+	// starts: the primary target plus any protocol address in the argv.
+	for _, checked := range scopeChecks(step, values, kind, effectivePort, scheme, urlOption) {
+		decision, err := plan.Policy.CheckTarget(checked)
+		if err != nil || !decision.Allowed {
+			reason := "invalid target"
+			if err == nil {
+				reason = decision.Reason
+			}
+			report("%s/%s: refused, %s", step.Tool, step.Invocation, reason)
+			return StepResult{Step: step, Target: target, Skipped: true, Error: "scope denied: " + reason}
 		}
-		report("%s/%s: refused, %s", step.Tool, step.Invocation, reason)
-		return StepResult{Step: step, Target: target, Skipped: true, Error: "scope denied: " + reason}
+	}
+	// The log and audited target name the address the command contacts.
+	scopeDisplay := targetValue
+	if kind == "url" || urlOption {
+		scopeDisplay = buildURLWithScheme(values.Host, effectivePort, scheme)
+	} else if effectivePort > 0 {
+		scopeDisplay = hostForURL(values.Host, effectivePort)
+	} else if step.AllowConventionalPort > 0 {
+		scopeDisplay = hostForURL(values.Host, step.AllowConventionalPort)
 	}
 
 	args := buildArgs(step, values)
 
-	report("round %d %s/%s on %s -> %s", step.Round, step.Tool, step.Invocation, scopeTarget, strings.Join(args, " "))
+	report("round %d %s/%s on %s -> %s", step.Round, step.Tool, step.Invocation, scopeDisplay, strings.Join(args, " "))
 	result, err := e.Execute(ctx, execution.Request{
 		Tool:              step.Tool,
 		Args:              args,
-		Target:            scopeTarget,
+		Target:            scopeDisplay,
 		OperationID:       op.ID,
 		Timeout:           op.StepTimeout,
 		ExpectedExitCodes: step.Accepted,
@@ -381,12 +345,12 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		combined := result.StdoutPreview + "\n" + result.StderrPreview + "\n" + stdout + "\n" + stderr
 		if match := step.Success.FindString(combined); match != "" {
 			stepResult.Matches = append(stepResult.Matches, match)
-			report("SUCCESS %s/%s on %s: %s", step.Tool, step.Invocation, scopeTarget, match)
+			report("SUCCESS %s/%s on %s: %s", step.Tool, step.Invocation, scopeDisplay, match)
 			stepResult.Success = true
 		}
 	}
 	if result.Status == execution.StatusSuccess && len(stepResult.Matches) == 0 {
-		report("done %s/%s on %s (%s)", step.Tool, step.Invocation, scopeTarget, result.Duration.Round(time.Millisecond))
+		report("done %s/%s on %s (%s)", step.Tool, step.Invocation, scopeDisplay, result.Duration.Round(time.Millisecond))
 	}
 
 	learned := ParseOutput(step.Tool, stdout+"\n"+result.StdoutPreview+"\n"+reported, stderr+"\n"+result.StderrPreview, values.Host)
@@ -462,6 +426,11 @@ func buildArgs(step Step, values Context) []string {
 
 	args := make([]string, 0, len(step.Args)+2*len(options))
 	used := map[string]bool{}
+	// A positional {{host}}, {{hostport}} or {{url}} is the target; the
+	// reviewed target flag must not add it a second time.
+	if hasTargetPlaceholder(step.Args) {
+		used[KeyTarget] = true
+	}
 	argsEmitted := 0
 	for _, arg := range step.Args {
 		// A placeholder with no value (for example an optional wordlist) is
@@ -541,56 +510,6 @@ func parsedScheme(raw string) string {
 	return scheme
 }
 
-// parsePortInURL reports the explicit port of a URL, and whether one exists.
-func parsePortInURL(raw string) (string, bool) {
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return "", false
-	}
-	if port := parsed.Port(); port != "" {
-		return port, true
-	}
-	return "", false
-}
-
-// reviewedTargetPlaceholder returns what the manifest's positional target
-// placeholder resolves to: the URL form for URL tools and the bare host or
-// host:port for the others.
-func reviewedTargetPlaceholder(plan *Plan, step Step) string {
-	var manifest tools.Manifest
-	if plan.Registry != nil {
-		manifest, _ = plan.Registry.Get(step.Tool)
-	}
-	host := baseContext(plan.Target).Host
-	if expanded := strings.TrimSpace(step.Target); expanded != "" && step.Port > 0 {
-		host = baseContext(expanded).Host
-	}
-	wantsURL := manifest.Usage.TargetMode == "url"
-	for _, flag := range manifest.Usage.TargetFlags {
-		if strings.Contains(flag, "{{url}}") {
-			wantsURL = true
-		}
-	}
-	if !wantsURL {
-		for _, arg := range step.Args {
-			for _, match := range placeholder.FindAllStringSubmatch(arg, -1) {
-				switch strings.TrimSpace(match[1]) {
-				case KeyURL:
-					wantsURL = true
-				case KeyHostPort:
-					return fmt.Sprintf("%s:%d", host, step.Port)
-				}
-			}
-		}
-	}
-	if wantsURL {
-		// Keep the scheme the operator used; https on 443 otherwise.
-		scheme := parsedScheme(plan.TargetURL)
-		return buildURLWithScheme(host, step.Port, scheme)
-	}
-	return host
-}
-
 // unresolvedServiceOptions reports template values that are still missing
 // once the engine has filled everything it can. A service tool without a
 // port is not run: it would silently fall back to the protocol default and
@@ -603,14 +522,6 @@ func unresolvedServiceOptions(step Step, values Context) []string {
 		}
 	}
 	return missing
-}
-
-// valuesForDefaultPort copies the context with a candidate default port.
-func valuesForDefaultPort(values Context, port string) Context {
-	copied := values
-	copied.Options = copiedValues(values.Options)
-	copied.Options[KeyDefaultPort] = port
-	return copied
 }
 
 // isFlag reports whether a token is a CLI flag rather than a value.

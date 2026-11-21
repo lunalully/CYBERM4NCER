@@ -106,7 +106,9 @@ Version parsing handles the coloured wafw00f banner and wpscan's
 | `amass`/`gobuster dns`/`subfinder` ran without a target | positional-only option received nothing | reviewed `value: "{{target}}"` in the manifest |
 | ffuf/gobuster `-u` lost | the flag was in the map but its value was not filled | option values resolved through the reviewed flag |
 | false open port `127.0.0.1:22` from the hydra success line | credential lines added their port to the assets | only proven open ports feed the fan-out; parsed assets stay recorded |
-| `nc`/`telnet`/`sslscan`/`testssl` connected to the bare host (port 80) | captured-port tools used the target flag for a URL | documented contract: these manifests put host and port as separate arguments |
+| `nc`/`telnet`/`sslscan`/`testssl` connected to the bare host (port 80) | captured-port tools used the target flag for a URL | `nc` and `telnet` pass host and port as two positional arguments, `sslscan`/`testssl` as `host:port` (`{{host}}` + `{{port}}`, filled per captured port) |
+| `wafw00f -a URL` reported unknown option | `-a` is aggressive mode, not a target flag | target positional; `-a` stays in the reviewed args |
+| ffuf/gobuster received `127.0.0.1` without scheme | target rendered as a bare host | URL tools get `http://host:port`; a bare host is checked against the implied port first |
 | duplicated URL-target option values | the target was filled twice | one place builds the target value |
 
 New tests cover the target placeholder, the scope refusal of conventional
@@ -119,9 +121,10 @@ template is left unresolved or if a flag is emitted without its value.
 | Scenario | Result |
 |---|---|
 | `tools detect` | 30/30 ready |
-| `all`, repeat 1, port-restricted scope | 81-94 steps, 13 ports captured, protocols outside the scope refused (`ssh`, `ftp`, `mysql`, `rdp`, port 80) |
-| `all`, level 5, repeat 2, full lists | 177 steps in 9m18s on `127.0.0.1`, 15 assets discovered, campaigns per target recorded |
-| `recon` on `http://127.0.0.1:8081` | whatweb and wafw00f run against the URL, nmap on the bare host |
+| `all`, repeat 1, port-restricted scope (`127.0.0.1`) | 78 steps in 4m59s, 12 open ports, `nc -v -w 3 127.0.0.1 445` and `telnet 127.0.0.1 445` per port, protocols outside the scope refused (`ssh`, port 80) |
+| `all`, repeat 1, URL target `http://127.0.0.1:8081` | 82 steps, 21 assets, `ffuf -u http://127.0.0.1:8081`, `gobuster ... -u http://127.0.0.1:8081`, `wafw00f -a -f json ... http://127.0.0.1:8081` |
+| `all`, level 5, repeat 2, full lists | 153-177 steps per run, 15 assets, campaigns and audit records written |
+| Bare host with a port-restricted scope | URL tools refused with `refused, port 80 is not allowed by scope`; nothing connects |
 
 ## Boundaries kept
 

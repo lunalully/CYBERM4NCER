@@ -158,6 +158,17 @@ func unresolvedKeys(args []string, values Context) []string {
 	return keys
 }
 
+// withoutKey removes one placeholder name from a missing list.
+func withoutKey(keys []string, drop string) []string {
+	kept := keys[:0]
+	for _, key := range keys {
+		if key != drop {
+			kept = append(kept, key)
+		}
+	}
+	return kept
+}
+
 // Skip records why a tool or invocation will not run.
 type Skip struct {
 	Tool       string `json:"tool"`
@@ -357,7 +368,12 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 				conventional = port
 				base.Options[KeyDefaultPort] = fmt.Sprint(port)
 			}
-			if missing := unresolvedKeys(invocation.Args, base); len(missing) > 0 {
+			missing := unresolvedKeys(invocation.Args, base)
+			if invocation.UsesCapturedPorts {
+				// {{port}} is filled for each captured open port at run time.
+				missing = withoutKey(missing, KeyPort)
+			}
+			if len(missing) > 0 {
 				plan.Skips = append(plan.Skips, Skip{Tool: manifest.Name, Invocation: invocation.Name, Reason: "missing option(s): " + strings.Join(missing, ", ")})
 				continue
 			}

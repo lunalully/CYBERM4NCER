@@ -28,7 +28,8 @@ invocations:
     description: Connects to a TELNET port and captures the service banner.
     mode: enum
     uses_captured_ports: true
-    args: []
+    # The target and its port are two positional arguments.
+    args: ["{{host}}", "{{port}}"]
     repeat: 3
     accept_exit_codes: [0, 1]
 notes: TELNET sends credentials and terminal data in clear text. Only use against systems that are explicitly in scope.
