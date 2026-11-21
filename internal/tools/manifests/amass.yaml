@@ -32,12 +32,14 @@ invocations:
     args: ["enum", "-active", "-brute"]
     repeat: 3
     options:
-      - {name: domain, flag: "-d"}
+      # {{target}} is the domain.
+      - {name: domain, flag: "-d", value: "{{target}}"}
   - name: enum-passive
     description: Passive enumeration from public sources.
     mode: recon
     args: ["enum", "-passive"]
     repeat: 2
     options:
-      - {name: domain, flag: "-d"}
+      # {{target}} is the domain.
+      - {name: domain, flag: "-d", value: "{{target}}"}
 

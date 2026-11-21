@@ -267,7 +267,7 @@ func (m *Manifest) Compile() error {
 		if inv.Repeat < 0 || inv.Repeat > 1000 {
 			errs = append(errs, fmt.Errorf("%s: invocation %q has repeat outside 0-1000", m.Name, inv.Name))
 		}
-		if inv.UsesCapturedPorts && m.Usage.TargetMode != "hostport" {
+		if inv.UsesCapturedPorts && m.Usage.TargetMode != "hostport" && m.Usage.TargetMode != "free" {
 			errs = append(errs, fmt.Errorf("%s: invocation %q uses captured ports but target_mode is %q", m.Name, inv.Name, m.Usage.TargetMode))
 		}
 		if inv.UsesCapturedPorts && inv.PortDiscovery {
@@ -310,12 +310,20 @@ func (m *Manifest) Compile() error {
 	return nil
 }
 
+// ansiEscape strips terminal color/style sequences. Many tools (Python
+// Click, Ruby gems) color their version banner, and the escape introducer is
+// not printable text, so a match spanning it fails in RE2.
+var ansiEscape = regexp.MustCompile("\\x1b\\[[0-9;?]*[ -/]*[@-~]")
+
+// StripANSI removes ANSI escape sequences from captured output.
+func StripANSI(output string) string { return ansiEscape.ReplaceAllString(output, "") }
+
 // VersionFromOutput extracts a version from a tool's output.
 func (m Manifest) VersionFromOutput(output string) string {
 	if m.versionRegex == nil {
 		return ""
 	}
-	match := m.versionRegex.FindStringSubmatch(output)
+	match := m.versionRegex.FindStringSubmatch(StripANSI(output))
 	if match == nil {
 		return ""
 	}

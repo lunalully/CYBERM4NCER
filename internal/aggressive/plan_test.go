@@ -76,18 +76,34 @@ func TestPlanExpandsRepeatedInvocations(t *testing.T) {
 	if counts["nuclei"] < 6 {
 		t.Fatalf("nuclei steps = %d, want at least 6", counts["nuclei"])
 	}
-	if counts["hydra"] != 2 {
-		t.Fatalf("hydra steps = %d, want 2", counts["hydra"])
+	// Service tools pass the protocol port inside their reviewed target.
+	if counts["hydra"] != 2 || counts["medusa"] != 2 {
+		t.Fatalf("hydra steps = %d, medusa steps = %d, want 2 each", counts["hydra"], counts["medusa"])
 	}
 	for _, step := range plan.Steps {
 		for _, arg := range step.Args {
-			if strings.Contains(arg, "{{") && !strings.Contains(arg, "{{out}}") && !strings.Contains(arg, "{{wordlist}}") && !strings.Contains(arg, "{{url}}") {
+			if strings.Contains(arg, "{{") && !strings.Contains(arg, "{{out}}") && !strings.Contains(arg, "{{wordlist}}") && !strings.Contains(arg, "{{url}}") && !strings.Contains(arg, "{{host}}") && !strings.Contains(arg, "{{default_port}}") && !strings.Contains(arg, "{{host:port}}") {
 				t.Fatalf("%s/%s left an unresolved template in args: %q", step.Tool, step.Invocation, arg)
 			}
 		}
 		if step.Tool != "telnet" && len(step.Args) == 0 {
 			t.Fatalf("%s/%s has empty args", step.Tool, step.Invocation)
 		}
+	}
+}
+
+func TestBuildArgsDropsMissingOptionalValues(t *testing.T) {
+	step := Step{
+		Args:        []string{"-silent", "-o", "{{out}}", "-w", "{{userlist}}"},
+		OptionFlags: map[string]string{"userlist": "-L"},
+	}
+	values := Context{Out: "/tmp/x", Host: "lab.internal"}
+	args := strings.Join(buildArgs(step, values), " ")
+	if strings.Contains(args, "{{") || strings.Contains(args, "userlist") {
+		t.Fatalf("missing values leaked into argv: %s", args)
+	}
+	if !strings.Contains(args, "-silent") || !strings.Contains(args, "/tmp/x") {
+		t.Fatalf("reviewed args were lost: %s", args)
 	}
 }
 

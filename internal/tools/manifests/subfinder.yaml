@@ -30,5 +30,6 @@ invocations:
     args: ["-all", "-silent"]
     repeat: 3
     options:
-      - {name: domain, flag: "-d"}
+      # {{target}} is the domain.
+      - {name: domain, flag: "-d", value: "{{target}}"}
 

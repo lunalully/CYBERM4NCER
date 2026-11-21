@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -24,10 +25,21 @@ var fakeScripts = map[string]string{}
 // scope rule for the test targets.
 type fakePerformer struct {
 	calls atomic.Int32
+	mu    sync.Mutex
+	seen  []execution.Request
+}
+
+func (f *fakePerformer) requests() []execution.Request {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]execution.Request(nil), f.seen...)
 }
 
 func (f *fakePerformer) run(ctx context.Context, req execution.Request) (execution.Result, error) {
 	f.calls.Add(1)
+	f.mu.Lock()
+	f.seen = append(f.seen, req)
+	f.mu.Unlock()
 	result := execution.Result{ID: "exec_test", Tool: req.Tool, Status: execution.StatusSuccess}
 	if req.Target != "" && !fakeScoped(req.Target) {
 		return result, &scopeDeniedError{message: "scope denied: " + req.Target}
@@ -266,5 +278,82 @@ func TestBuildArgsUsesReviewedOptionValues(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("args lack %q: %v", want, args)
 		}
+	}
+}
+
+func TestMain(m *testing.M) {
+	if mode := os.Getenv("FAKE_ARGV_MODE"); mode != "" {
+		if log := os.Getenv("FAKE_ARGV_LOG"); log != "" {
+			_ = os.WriteFile(log, []byte(strings.Join(os.Args[1:], " ")), 0o600)
+		}
+		fmt.Println("[22][ssh] host: 127.0.0.1 login: root password: toor")
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+func TestRunStepTargetFlagIsNotDuplicated(t *testing.T) {
+	registry, err := tools.LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	planner := &Planner{Registry: registry, Mode: DefaultMode()}
+	plan, err := planner.Plan("127.0.0.1", mustPolicy(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	performer := &fakePerformer{}
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	for _, step := range plan.Steps {
+		if step.Round != 1 {
+			continue
+		}
+		one := *plan
+		one.Steps = []Step{step}
+		if _, err := executor.Run(context.Background(), &one, Operation{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, req := range performer.requests() {
+		// The target appears exactly once, either alone or inside the
+		// reviewed service URI (ssh://127.0.0.1:22), never twice.
+		count := 0
+		for _, arg := range req.Args {
+			if strings.Contains(arg, "127.0.0.1") {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Fatalf("%s: target appears %d times in %q", req.Tool, count, req.Args)
+		}
+		if strings.Contains(strings.Join(req.Args, " "), "{{") {
+			t.Fatalf("%s: unresolved template in %q", req.Tool, req.Args)
+		}
+	}
+}
+
+func TestExecutorOnlyExpandsProvenOpenPorts(t *testing.T) {
+	// A comment mentions a closed port; only the scanner line proves 8080.
+	registry := fakeRegistry(t, map[string]string{
+		"scanner": `for a in "$@"; do case "$a" in banner) echo "banner for $*"; return 0;; esac; done; echo "connecting to 127.0.0.1:9999"; echo "127.0.0.1:9999 closed"; echo "Discovered open port 8080/tcp on 127.0.0.1"; true`,
+	}, nil)
+	performer := &fakePerformer{}
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	planner := &Planner{Registry: registry, Mode: Mode{Name: "all", Level: 5, RepeatQuota: 5, IncludeIntrusive: true}}
+	plan, err := planner.Plan("127.0.0.1", mustPolicy(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var progress strings.Builder
+	if _, err := executor.Run(context.Background(), plan, Operation{Progress: &progress}); err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range performer.requests() {
+		if strings.HasSuffix(req.Target, ":9999") {
+			t.Fatalf("closed port was contacted: %s\n%s", req.Target, progress.String())
+		}
+	}
+	if !strings.Contains(progress.String(), "banner on 127.0.0.1:8080") {
+		t.Fatalf("open port was not expanded:\n%s", progress.String())
 	}
 }

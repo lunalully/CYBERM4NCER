@@ -7,6 +7,19 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Scanners receive a bare host (or `host:port`) instead of a URL and the
+  target is emitted exactly once, in the reviewed position.
+- Service steps (hydra, medusa) put the port in their protocol target and are
+  refused before running when that port is outside the scope.
+- Only ports proven open by a scanner feed the per-port fan-out; assets parsed
+  from output are still recorded.
+- Version detection strips ANSI colour codes (wafw00f) and parses wpscan's
+  `Current Version:` line; all 30 tools are detected as ready on the lab host.
+- ffuf/gobuster/amass/subfinder/medusa reviewed invocations now pass the
+  target; whatweb uses its positional target (`--url` is ambiguous).
+
 ### Added
 
 - Aggressive engine: expanded plans, repeated rounds, per-port fan-out, report

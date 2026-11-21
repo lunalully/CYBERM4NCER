@@ -14,7 +14,7 @@ capabilities: [cms_vulnerability_detection, plugin_enumeration, user_enumeration
 outputs: [text, json]
 version_check:
   args: ["--version"]
-  regex: '(?i)wpscan\s+v?([0-9]+\.[0-9]+\.[0-9]+)'
+  regex: '(?i)Current Version:\s*v?([0-9]+\.[0-9]+\.[0-9]+)'
 install:
   - method: apt
     package: wpscan

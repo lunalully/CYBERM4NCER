@@ -45,7 +45,8 @@ invocations:
     args: ["dns", "-q", "--no-error", "--no-progress"]
     repeat: 3
     options:
-      - {name: domain, flag: "-d"}
+      # {{target}} is the domain.
+      - {name: domain, flag: "-d", value: "{{target}}"}
       - {name: wordlist, flag: "-w"}
   - name: vhost-enum
     description: Virtual host discovery against the URL.

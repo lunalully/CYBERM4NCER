@@ -49,16 +49,17 @@ func DefaultMode() Mode {
 
 // Template keys understood by the planner.
 const (
-	KeyTarget     = "target"
-	KeyHost       = "host"
-	KeyHostPort   = "hostport"
-	KeyPort       = "port"
-	KeyURL        = "url"
-	KeyOut        = "out"
-	KeyWordlist   = "wordlist"
-	KeyUserList   = "userlist"
-	KeyPassList   = "passlist"
-	KeyExtensions = "extensions"
+	KeyTarget      = "target"
+	KeyHost        = "host"
+	KeyHostPort    = "hostport"
+	KeyPort        = "port"
+	KeyURL         = "url"
+	KeyDefaultPort = "default_port"
+	KeyOut         = "out"
+	KeyWordlist    = "wordlist"
+	KeyUserList    = "userlist"
+	KeyPassList    = "passlist"
+	KeyExtensions  = "extensions"
 )
 
 // DefaultWordlist is used by free-form web tools when none is supplied.
@@ -183,6 +184,10 @@ type Step struct {
 	OptionFlags map[string]string
 	// OptionValues are fixed reviewed values for some options.
 	OptionValues map[string]string
+	// AllowConventionalPort is the protocol default a service step is
+	// planned to contact when the target names no port. The engine checks
+	// it against the scope before adding the port flag.
+	AllowConventionalPort int
 }
 
 // MarshalJSON renders a step for human/JSON output. Map keys are sorted by
@@ -200,23 +205,32 @@ func (s Step) MarshalJSON() ([]byte, error) {
 		Expand       bool              `json:"per_open_port,omitempty"`
 		OptionFlags  map[string]string `json:"option_flags,omitempty"`
 		OptionValues map[string]string `json:"option_values,omitempty"`
+		// ConventionalPort is the protocol default planned when the target
+		// carries no explicit port.
+		ConventionalPort int `json:"conventional_port,omitempty"`
 	}
 	return json.Marshal(plain{
 		Tool: s.Tool, Invocation: s.Invocation, Mode: s.Mode, Round: s.Round,
 		Target: s.Target, Args: s.Args, Accepted: s.Accepted, Produces: s.Produces,
 		Expand: s.Expand, OptionFlags: s.OptionFlags, OptionValues: s.OptionValues,
+		ConventionalPort: s.AllowConventionalPort,
 	})
 }
 
 // Plan is the full command list for an operation.
 type Plan struct {
-	Target  string
-	Policy  *scope.Policy
-	Mode    Mode
-	Steps   []Step
-	Tools   []string
-	Skips   []Skip
-	Repeats int
+	Target string
+	Policy *scope.Policy
+	// Registry resolves manifests when a step must be re-checked at run time.
+	Registry *tools.Registry
+	// TargetURL keeps the URL the operator typed (empty for bare targets) so
+	// URL steps still use its scheme once they run on a host:port pair.
+	TargetURL string
+	Mode      Mode
+	Steps     []Step
+	Tools     []string
+	Skips     []Skip
+	Repeats   int
 }
 
 // Planner compiles manifests into steps.
@@ -302,7 +316,7 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 		return nil, fmt.Errorf("%w: %s", ScopeDenied, decision.Reason)
 	}
 
-	plan := &Plan{Target: target, Policy: policy, Mode: p.Mode}
+	plan := &Plan{Target: target, Policy: policy, Mode: p.Mode, Registry: p.Registry, TargetURL: baseContext(target).URL}
 	base := baseContext(target)
 	if p.Mode.Wordlist != "" {
 		base.Options[KeyWordlist] = p.Mode.Wordlist
@@ -335,6 +349,14 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 				plan.Skips = append(plan.Skips, Skip{Tool: manifest.Name, Invocation: invocation.Name, Reason: "free-form tool requires explicit options"})
 				continue
 			}
+			// A service step without a port in the target uses the
+			// protocol default; it is planned with that port explicit.
+			conventional := 0
+			base.Options[KeyDefaultPort] = ""
+			if port := atoi(fixedValue(invocation.Options, KeyDefaultPort)); port > 0 {
+				conventional = port
+				base.Options[KeyDefaultPort] = fmt.Sprint(port)
+			}
 			if missing := unresolvedKeys(invocation.Args, base); len(missing) > 0 {
 				plan.Skips = append(plan.Skips, Skip{Tool: manifest.Name, Invocation: invocation.Name, Reason: "missing option(s): " + strings.Join(missing, ", ")})
 				continue
@@ -350,25 +372,32 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 			}
 			// Addressed tools receive their target through reviewed flags so
 			// the argv order is explicit in the plan.
-			if manifest.Usage.TargetMode != "" && manifest.Usage.TargetMode != "free" && len(manifest.Usage.TargetFlags) > 0 {
-				flags[KeyTarget] = manifest.Usage.TargetFlags[0]
+			if manifest.Usage.TargetMode != "" && manifest.Usage.TargetMode != "free" {
+				// A reviewed positional placeholder already carries the
+				// target; otherwise it goes in the first target flag. The
+				// port of service tools is passed by their own option.
+				flags[KeyTarget] = ""
+				if len(manifest.Usage.TargetFlags) > 0 && manifest.Usage.TargetFlags[0] != "" {
+					flags[KeyTarget] = manifest.Usage.TargetFlags[0]
+				}
 			}
 
 			repeat := p.Mode.effectiveRepeat(invocation)
 			for round := 1; round <= repeat; round++ {
 				plan.Steps = append(plan.Steps, Step{
-					Tool:         manifest.Name,
-					Invocation:   invocation.Name,
-					Mode:         invocation.Mode,
-					Round:        round,
-					Target:       target,
-					Args:         args,
-					Accepted:     append([]int(nil), invocation.AcceptExitCodes...),
-					Success:      compileSuccess(invocation.SuccessRegex),
-					Produces:     invocation.ProducesURLs,
-					Expand:       invocation.UsesCapturedPorts,
-					OptionFlags:  flags,
-					OptionValues: fixed,
+					Tool:                  manifest.Name,
+					Invocation:            invocation.Name,
+					Mode:                  invocation.Mode,
+					Round:                 round,
+					Target:                target,
+					Args:                  args,
+					Accepted:              append([]int(nil), invocation.AcceptExitCodes...),
+					Success:               compileSuccess(invocation.SuccessRegex),
+					Produces:              invocation.ProducesURLs,
+					Expand:                invocation.UsesCapturedPorts,
+					OptionFlags:           flags,
+					OptionValues:          fixed,
+					AllowConventionalPort: conventional,
 				})
 			}
 			added++
@@ -380,6 +409,16 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 	}
 	sort.Strings(plan.Tools)
 	return plan, nil
+}
+
+// fixedValue returns the reviewed value of an option, if any.
+func fixedValue(options []tools.Option, name string) string {
+	for _, option := range options {
+		if option.Name == name {
+			return option.Value
+		}
+	}
+	return ""
 }
 
 func compileSuccess(expr string) *regexp.Regexp {
@@ -395,7 +434,8 @@ func compileSuccess(expr string) *regexp.Regexp {
 
 // baseContext derives template values for a raw target.
 func baseContext(target string) Context {
-	host := strings.ToLower(strings.TrimSpace(target))
+	rawTarget := strings.TrimSpace(target)
+	host := strings.ToLower(rawTarget)
 	port := 0
 	if strings.HasPrefix(host, "http://") || strings.HasPrefix(host, "https://") {
 		if parsed, err := url.Parse(host); err == nil {
@@ -413,11 +453,11 @@ func baseContext(target string) Context {
 		port = atoi(parsedPort)
 	}
 	url := ""
-	if strings.HasPrefix(strings.ToLower(target), "http://") || strings.HasPrefix(strings.ToLower(target), "https://") {
-		url = target
+	if strings.HasPrefix(strings.ToLower(rawTarget), "http://") || strings.HasPrefix(strings.ToLower(rawTarget), "https://") {
+		url = rawTarget
 	}
 	return Context{
-		Target: target,
+		Target: rawTarget,
 		Host:   host,
 		Port:   port,
 		URL:    url,
@@ -426,6 +466,53 @@ func baseContext(target string) Context {
 			KeyExtensions: DefaultExtensions(),
 		},
 	}
+}
+
+// Resolved reports whether every placeholder in a template has a value.
+func Resolved(template string, values Context) bool {
+	for _, match := range placeholder.FindAllStringSubmatch(template, -1) {
+		name := strings.TrimSpace(match[1])
+		if name == "" {
+			return false
+		}
+		// Options are the only keys that can be legitimately absent (an
+		// optional wordlist, a target flag); everything else must have a
+		// value or the argument is meaningless.
+		if values.Options != nil {
+			if value, ok := values.Options[name]; ok && strings.TrimSpace(value) != "" {
+				continue
+			}
+		}
+		switch name {
+		case KeyOut:
+			continue
+		case KeyTarget, KeyHost, KeyHostPort, KeyURL:
+			if contextValue(values, name) != "" {
+				continue
+			}
+		case KeyPort:
+			if values.Port > 0 {
+				continue
+			}
+		}
+		return false
+	}
+	return true
+}
+
+// contextValue returns the direct (non-option) value of a template key.
+func contextValue(values Context, key string) string {
+	switch key {
+	case KeyTarget:
+		return values.Target
+	case KeyHost:
+		return values.Host
+	case KeyHostPort:
+		return values.HostPort
+	case KeyURL:
+		return values.URL
+	}
+	return ""
 }
 
 // StepContext builds template values for one step.

@@ -253,3 +253,25 @@ func TestDetectAllPreservesOrder(t *testing.T) {
 		t.Fatalf("detections = %+v", detections)
 	}
 }
+
+func TestEmbeddedVersionRegexesMatchCapturedOutput(t *testing.T) {
+	registry, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Real outputs captured on the lab host, including ANSI-colored banners.
+	captured := map[string]string{
+		"wafw00f": "\n                \x1b[1;97m______\n               \x1b[1;97m/      \\\n[+] The version of WAFW00F you have is \x1b[1;94mv2.3.1\n",
+		"wpscan":  "\nCurrent Version: 4.2.0\n\n",
+		"whatweb": "WhatWeb version 0.5.5 ( https://www.morningstarsecurity.com/research/whatweb/ )\n",
+	}
+	for tool, output := range captured {
+		manifest, ok := registry.Get(tool)
+		if !ok {
+			t.Fatalf("missing manifest %s", tool)
+		}
+		if version := manifest.VersionFromOutput(output); version == "" {
+			t.Fatalf("%s: version regex did not match captured output", tool)
+		}
+	}
+}

@@ -22,7 +22,7 @@ install:
     notes: Ruby gem from the official project; requires the distribution's Ruby runtime.
 usage:
   target_mode: url
-  target_flags: ["--url"]
+  target_flags: []
   url_paths: ["/"]
 invocations:
   - name: aggressive

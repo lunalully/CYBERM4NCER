@@ -21,7 +21,8 @@ the scope as the only enforced boundary.
   `uses_captured_ports`, `produces_urls`, `accept_exit_codes`,
   `success_regex`, options (flag + optional fixed value).
 - Validation: an invocation that both discovers and consumes ports, or a
-  port-consuming invocation on a non-`hostport` tool, is rejected at load time.
+  port-consuming invocation on a tool that is neither `hostport` nor `free`,
+  is rejected at load time.
 - 30 manifests carried invocations into this phase; httpx, dnsx and ffuf were
   corrected after live validation (target flag `-u`, wordlist option, vhost
   header fixed by `option value`).
@@ -74,14 +75,53 @@ Database after the runs: one `operations` row per target
 `aggressive.plan`, `aggressive.run`, `scope.allowed` and `scope.denied` audit
 entries.
 
-## Failures observed and explained
+## Second validation round (installation and fixes)
 
-- `wafw00f` is not installed; `whatweb` and `wpscan` fail on missing Ruby gems
-  in this environment. The engine reports each failure per step.
-- `naabu` needs root for raw sockets; `nmap` runs in connect fallback here.
-- `/usr/share/wordlists/dirb/common.txt` does not exist in this lab, so web
-  brute-force steps failed with "wordlist not found"; the CLI warns before the
-  run and `--wordlist` overrides the path.
+The lab host was repaired and the engine validated again, still only against
+`127.0.0.1`. Every problem found in the first round was fixed in code or in a
+manifest, not worked around by hand.
+
+### Environment installed
+
+| Item | Result |
+|---|---|
+| `wafw00f` 2.3.1 | `apt-get install wafw00f` |
+| `whatweb` 0.5.5 | runs after `gem install minitest public_suffix` for the user install |
+| `wpscan` 4.2.0 | runs after the missing gems (`nokogiri`, `racc`, `xmlrpc`, `rexml`, `webrick`) and `wpscan --update` |
+| `dirb/common.txt` | symlinked to SecLists `Discovery/Web-Content/common.txt` (4751 entries) |
+
+`cyberm4ncer tools detect` now reports **30 of 30 tools installed and ready**.
+Version parsing handles the coloured wafw00f banner and wpscan's
+`Current Version:` line (ANSI escapes are stripped before matching).
+
+### Defects found live and fixed
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `nmap`/`masscan`/`naabu` received `http://127.0.0.1:8081` | scanners got the URL | target placeholder returns host or `host:port` for non-URL tools |
+| `nmap ... 127.0.0.1 127.0.0.1` (target twice) | positional `{{network}}` plus the target flag | single reviewed target argument, flag only when the manifest has one |
+| `whatweb --url` ambiguous error | `--url` is a prefix of three flags | positional target mode |
+| `wpscan` aborted: database missing | first run on a fresh install | documented `wpscan --update`; no code change |
+| hydra `-s 22 ... -s 127.0.0.1:22` | target and port shared one flag | hydra reviewed as `-I ssh://{{host}}:22`, medusa as `-h {{host}} -n 22` (single reviewed invocation, port checked against the scope) |
+| `amass`/`gobuster dns`/`subfinder` ran without a target | positional-only option received nothing | reviewed `value: "{{target}}"` in the manifest |
+| ffuf/gobuster `-u` lost | the flag was in the map but its value was not filled | option values resolved through the reviewed flag |
+| false open port `127.0.0.1:22` from the hydra success line | credential lines added their port to the assets | only proven open ports feed the fan-out; parsed assets stay recorded |
+| `nc`/`telnet`/`sslscan`/`testssl` connected to the bare host (port 80) | captured-port tools used the target flag for a URL | documented contract: these manifests put host and port as separate arguments |
+| duplicated URL-target option values | the target was filled twice | one place builds the target value |
+
+New tests cover the target placeholder, the scope refusal of conventional
+service ports, verified open-port-only fan-out, and a regression test that
+replays every planned step and fails if the target appears twice, if a
+template is left unresolved or if a flag is emitted without its value.
+
+### Numbers after the fixes
+
+| Scenario | Result |
+|---|---|
+| `tools detect` | 30/30 ready |
+| `all`, repeat 1, port-restricted scope | 81-94 steps, 13 ports captured, protocols outside the scope refused (`ssh`, `ftp`, `mysql`, `rdp`, port 80) |
+| `all`, level 5, repeat 2, full lists | 177 steps in 9m18s on `127.0.0.1`, 15 assets discovered, campaigns per target recorded |
+| `recon` on `http://127.0.0.1:8081` | whatweb and wafw00f run against the URL, nmap on the bare host |
 
 ## Boundaries kept
 

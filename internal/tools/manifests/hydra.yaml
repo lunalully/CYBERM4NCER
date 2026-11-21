@@ -22,7 +22,9 @@ install:
   - method: manual
     notes: Use the distribution package or a reviewed build of the official repository.
 usage:
-  target_mode: cidr
+  # Protocols are part of the argv, so the port is in the reviewed target.
+  target_mode: free
+  target_flags: []
   default_ports: [21, 22, 23, 25, 110, 143, 389, 445, 1433, 3306, 3389, 5432, 5433, 5900, 5985, 5986, 6379, 8080, 8443]
   speed_args:
     3: ["-t", "16"]
@@ -32,12 +34,12 @@ invocations:
   - name: brute-common-protocols
     description: Tries the supplied user/password lists against common protocols.
     mode: credential
-    args: []
+    args: ["-f", "-I", "ssh://{{host}}:{{default_port}}"]
     repeat: 2
     accept_exit_codes: [0, 255]
     success_regex: '(?i)\[\d+\]\[[^\]]+\]\s+host:\s+\S+\s+.*login:\s+\S+\s+password:\s+\S+'
     options:
-      - {name: protocol, flag: ""}
+      - {name: default_port, flag: "-s", value: "22"}
       - {name: userlist, flag: "-L"}
       - {name: passlist, flag: "-P"}
 notes: |

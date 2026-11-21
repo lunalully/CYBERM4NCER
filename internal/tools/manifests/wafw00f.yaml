@@ -14,7 +14,7 @@ capabilities: [waf_detection, technology_fingerprinting]
 outputs: [text, json]
 version_check:
   args: ["--version"]
-  regex: '(?i)wafw00f\s*v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+  regex: '(?i)WAFW00F[^0-9]*v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
 install:
   - method: pipx
     package: wafw00f

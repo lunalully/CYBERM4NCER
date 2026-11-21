@@ -37,6 +37,24 @@ cyberm4ncer aggressive --file targets.txt --scope engagement.yaml \
   --max-steps 200 --execute
 ```
 
+### Target placeholders
+
+Manifests address the target with reviewed placeholders, and the engine fills
+the one the manifest asked for:
+
+| Placeholder | Value |
+|---|---|
+| `{{target}}` | host, `host:port` or URL, as the step scans it |
+| `{{host}}` / `{{port}}` | bare host and port as separate arguments |
+| `{{host:port}}` | `host:port` in a single argument |
+| `{{url}}` | `http://` URL (kept from the operator's scheme) |
+| `{{default_port}}` | the protocol default of a service step (22, 445, ...) |
+| `{{wordlist}}`, `{{userlist}}`, `{{passlist}}` | operator-supplied lists |
+| `{{out}}` | the step's report file or directory |
+
+A flag without a value is never passed on its own, and an argument whose
+placeholder has no value is dropped instead of being executed literally.
+
 ### Flags
 
 | Flag | Meaning |
@@ -65,7 +83,12 @@ included by default. Removing them is the operator's explicit choice.
 3. **Port discovery.** Steps with `port_discovery: true` add discovered
    host:port pairs to the capture set.
 4. **Fan-out.** Steps with `uses_captured_ports: true` run once per captured
-   open port for each planned round.
+   **open** port for each planned round. A port only counts as open when a
+   scanner explicitly reported it (`80/tcp open`, `Discovered open port`,
+   `"port":8080`); mentions in prose or banners never trigger a connection.
+   Each expanded step carries `host:port` as its target, while port-first
+   tools (`nc`, `telnet`, `sslscan`, `testssl`) pass host and port separately
+   as reviewed in their manifests.
 5. **URL production.** Steps with `produces_urls: true` convert captured web
    ports into `http(s)://host[:port]/` URLs; URL-targeted tools receive them
    through their reviewed flag such as `-u`.
@@ -110,7 +133,25 @@ multiple rounds and full wordlists.
   `CYBERM4NCER_WORDLIST`).
 - hydra and medusa require `--userlist` and `--passlist`. Without them the step
   is skipped and listed under `skipped:` in the plan.
+- hydra and medusa carry their protocol and port in the reviewed target
+  (`hydra -I ssh://{{host}}:22`, `medusa -M ssh -h {{host}} -n 22`). Each is a
+  single reviewed invocation, so it mirrors the installed tool exactly; the
+  conventional port is checked against the port scope before it runs and a
+  port-restricted engagement refuses it instead of falling back to the tool
+  default.
+- `wpscan` needs its local database (`wpscan --update` once after install).
 - A successful login line is printed as `SUCCESS` and listed in the summary.
+
+## Tool setup seen in the lab
+
+`whatweb`, `wpscan` and `wafw00f` were installed and repaired on the lab host:
+
+| Tool | Notes |
+|---|---|
+| `wafw00f` | `apt-get install wafw00f`; the version banner is coloured, so the detector strips ANSI before matching |
+| `whatweb` | needs Ruby gems (fixed with `minitest`, `public_suffix`); PHP/`nokogiri` not required |
+| `wpscan` | gems plus a database; `wpscan --update` after install |
+| wordlists | `/usr/share/wordlists/dirb/common.txt` created as a symlink to SecLists `common.txt` |
 
 ## Known limitations
 
