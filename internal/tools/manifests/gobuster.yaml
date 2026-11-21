@@ -22,3 +22,37 @@ install:
     package: gobuster
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: free
+  speed_args:
+    3: ["-t", "50"]
+    4: ["-t", "100"]
+    5: ["-t", "200"]
+invocations:
+  - name: dir-enum
+    description: Directory and file discovery with the supplied wordlist.
+    mode: enum
+    args: ["dir", "-q", "--no-error", "--no-progress", "-k"]
+    repeat: 3
+    options:
+      - {name: url, flag: "-u"}
+      - {name: wordlist, flag: "-w"}
+      - {name: extensions, flag: "-x"}
+      - {name: statuscodes, flag: "-s"}
+  - name: dns-enum
+    description: DNS subdomain brute force against the domain.
+    mode: enum
+    args: ["dns", "-q", "--no-error", "--no-progress"]
+    repeat: 3
+    options:
+      - {name: domain, flag: "-d"}
+      - {name: wordlist, flag: "-w"}
+  - name: vhost-enum
+    description: Virtual host discovery against the URL.
+    mode: enum
+    args: ["vhost", "-q", "--no-error", "--no-progress"]
+    repeat: 3
+    options:
+      - {name: url, flag: "-u"}
+      - {name: wordlist, flag: "-w"}
+

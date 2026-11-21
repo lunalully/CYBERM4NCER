@@ -20,3 +20,29 @@ install:
     package: github.com/ffuf/ffuf/v2@v2.1.0
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: free
+  speed_args:
+    3: ["-rate", "200"]
+    4: ["-rate", "500"]
+    5: ["-rate", "1000"]
+invocations:
+  - name: dir-enum
+    description: Directory and file discovery with the supplied wordlist.
+    mode: enum
+    args: ["-mc", "200,204,301,302,307,401,403,405,500", "-ac", "-s", "-of", "json", "-o", "{{out}}"]
+    repeat: 3
+    options:
+      - {name: url, flag: "-u"}
+      - {name: wordlist, flag: "-w"}
+      - {name: extensions, flag: "-e"}
+  - name: vhost-enum
+    description: Virtual host discovery against the target host.
+    mode: enum
+    args: ["-mc", "200,204,301,302,307,401,403", "-fs", "0", "-ac", "-s", "-of", "json", "-o", "{{out}}"]
+    repeat: 3
+    options:
+      - {name: url, flag: "-u"}
+      - {name: vhost, flag: "-H", value: "Host: FUZZ"}
+      - {name: wordlist, flag: "-w"}
+

@@ -22,3 +22,22 @@ install:
     package: amass
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: free
+  target_flags: ["-d"]
+invocations:
+  - name: enum-active
+    description: Active enumeration of the domain with brute force.
+    mode: recon
+    args: ["enum", "-active", "-brute"]
+    repeat: 3
+    options:
+      - {name: domain, flag: "-d"}
+  - name: enum-passive
+    description: Passive enumeration from public sources.
+    mode: recon
+    args: ["enum", "-passive"]
+    repeat: 2
+    options:
+      - {name: domain, flag: "-d"}
+

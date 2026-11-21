@@ -20,3 +20,23 @@ install:
     package: github.com/projectdiscovery/nuclei/v3/cmd/nuclei@v3.11.1
   - method: manual
     notes: Build from a reviewed release of the official repository. Template updates are a separate explicit action.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+  speed_args:
+    3: ["-c", "25", "-rl", "150"]
+    4: ["-c", "50", "-rl", "300"]
+    5: ["-c", "100", "-rl", "600"]
+invocations:
+  - name: full-templates
+    description: Runs every severity with all severities, newer templates first.
+    mode: vuln
+    args: ["-silent", "-duc", "-severity", "info,low,medium,high,critical", "-jsonl", "-o", "{{out}}"]
+    repeat: 3
+  - name: high-issues
+    description: Focuses on high and critical findings with automatic scan.
+    mode: vuln
+    args: ["-silent", "-duc", "-as", "-severity", "high,critical", "-jsonl", "-o", "{{out}}"]
+    repeat: 3
+

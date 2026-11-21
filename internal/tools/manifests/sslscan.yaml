@@ -20,3 +20,15 @@ install:
     package: sslscan
   - method: manual
     notes: Use the distribution package or the official reviewed release.
+usage:
+  target_mode: hostport
+  default_ports: [443, 8443, 9443, 465, 993, 995, 636, 853]
+invocations:
+  - name: full
+    description: Full cipher, protocol and vulnerability scan on each TLS port.
+    mode: vuln
+    uses_captured_ports: true
+    args: ["--show-certificate", "--show-client-cas", "--no-colour", "--xml", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+

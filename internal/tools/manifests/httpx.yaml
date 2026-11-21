@@ -20,3 +20,20 @@ install:
     package: github.com/projectdiscovery/httpx/cmd/httpx@v1.12.0
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+invocations:
+  - name: probe
+    description: Probes the URL and fingerprints technology, titles and CDN.
+    mode: recon
+    args: ["-silent", "-td", "-title", "-status-code", "-tech-detect", "-json", "-o", "{{out}}"]
+    repeat: 3
+  - name: probe-all
+    description: Probes every captured web port as a URL.
+    mode: recon
+    args: ["-silent", "-td", "-title", "-status-code", "-tech-detect", "-json", "-o", "{{out}}"]
+    repeat: 3
+    produces_urls: true
+

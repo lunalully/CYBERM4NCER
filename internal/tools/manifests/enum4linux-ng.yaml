@@ -1,0 +1,32 @@
+name: enum4linux-ng
+description: Next-generation SMB/RPC/LDAP enumeration for Windows and Samba hosts.
+category: network
+homepage: https://github.com/cddmp/enum4linux-ng
+documentation: https://github.com/cddmp/enum4linux-ng
+license: GPL-3.0
+binary: enum4linux-ng
+min_version: 1.3.0
+tested_version: 1.3.10
+architectures: [any]
+risk: medium
+intrusive: true
+capabilities: [smb_enumeration, rpc_enumeration, ldap_enumeration, user_enumeration]
+outputs: [text, json]
+version_check:
+  args: ["--help"]
+  regex: '(?i)ENUM4LINUX\s*-\s*next generation\s*\(v([0-9]+\.[0-9]+\.[0-9]+)\)'
+  accept_exit_codes: [0, 1]
+install:
+  - method: pipx
+    package: enum4linux-ng
+  - method: manual
+    notes: Install from the official repository with pipx.
+usage:
+  target_mode: host
+invocations:
+  - name: all
+    description: Runs every enumeration module and writes JSON.
+    mode: enum
+    args: ["-A", "-oJ", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1, 2]

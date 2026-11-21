@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,6 +68,67 @@ func TestLoadEmbeddedRegistry(t *testing.T) {
 	for _, name := range []string{"subfinder", "httpx", "nuclei", "nmap", "sqlmap"} {
 		if _, ok := registry.Get(name); !ok {
 			t.Fatalf("missing manifest %s", name)
+		}
+	}
+}
+
+func TestEmbeddedInvocationsAreReviewed(t *testing.T) {
+	registry, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	withInvocations := 0
+	for _, manifest := range registry.List() {
+		for _, invocation := range manifest.Invocations {
+			withInvocations++
+			for _, arg := range invocation.Args {
+				if strings.TrimSpace(arg) == "" {
+					t.Errorf("%s/%s: empty argument", manifest.Name, invocation.Name)
+				}
+				if strings.ContainsAny(arg, ";|&`$\n") && !strings.HasPrefix(arg, "{{") {
+					t.Errorf("%s/%s: argument %q looks like shell syntax", manifest.Name, invocation.Name, arg)
+				}
+			}
+			if invocation.Mode == "credential" {
+				hasWordlist := false
+				for _, option := range invocation.Options {
+					if option.Name == "userlist" || option.Name == "passlist" || option.Name == "wordlist" {
+						hasWordlist = true
+					}
+				}
+				if !hasWordlist {
+					t.Errorf("%s/%s: credential invocation must require wordlists", manifest.Name, invocation.Name)
+				}
+			}
+			if invocation.UsesCapturedPorts && len(manifest.Usage.DefaultPorts) == 0 {
+				t.Errorf("%s/%s: uses captured ports but declares no default ports", manifest.Name, invocation.Name)
+			}
+		}
+	}
+	if withInvocations < 20 {
+		t.Fatalf("only %d invocations reviewed", withInvocations)
+	}
+}
+
+func TestAggressiveToolsCoverRequestedSet(t *testing.T) {
+	registry, err := LoadEmbedded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	required := []string{
+		"wafw00f", "telnet", "nc", "hydra", "medusa", "masscan", "rustscan",
+		"nmap", "naabu", "ffuf", "gobuster", "feroxbuster", "dirb", "nuclei",
+		"sqlmap", "nikto", "sslscan", "testssl", "katana", "httpx", "whatweb",
+		"nxc", "enum4linux-ng", "dalfox", "arjun", "dirsearch", "wpscan",
+	}
+	for _, name := range required {
+		manifest, ok := registry.Get(name)
+		if !ok {
+			t.Errorf("missing manifest %s", name)
+			continue
+		}
+		if len(manifest.Invocations) == 0 {
+			t.Errorf("%s has no invocations", name)
 		}
 	}
 }

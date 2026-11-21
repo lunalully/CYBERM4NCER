@@ -1,0 +1,37 @@
+name: arjun
+description: HTTP parameter discovery via active guessing and passive sources.
+category: web
+homepage: https://github.com/s0md3v/Arjun
+documentation: https://github.com/s0md3v/Arjun/wiki
+license: AGPL-3.0
+binary: arjun
+min_version: 2.2.0
+tested_version: 2.2.1
+architectures: [any]
+risk: medium
+intrusive: true
+capabilities: [parameter_discovery, http_fuzzing]
+outputs: [text, json]
+version_check:
+  args: []
+  regex: '(?i)\(//\)\s*v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+  accept_exit_codes: [0, 1, 2]
+install:
+  - method: pipx
+    package: arjun
+  - method: manual
+    notes: Install from PyPI with the distribution's Python runtime.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+  speed_args:
+    4: ["-t", "50"]
+    5: ["-t", "100"]
+invocations:
+  - name: discover
+    description: Discovers GET and POST parameters and writes JSON.
+    mode: enum
+    args: ["-q", "-m", "GET,POST", "-oJ", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]

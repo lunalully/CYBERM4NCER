@@ -20,3 +20,15 @@ install:
     package: github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: free
+  target_flags: ["-d"]
+invocations:
+  - name: passive
+    description: Passive subdomain discovery from public sources.
+    mode: recon
+    args: ["-all", "-silent"]
+    repeat: 3
+    options:
+      - {name: domain, flag: "-d"}
+

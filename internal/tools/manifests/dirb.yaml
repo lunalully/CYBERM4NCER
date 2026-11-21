@@ -1,0 +1,36 @@
+name: dirb
+description: Simple dictionary-based directory and file discovery.
+category: web
+homepage: https://sourceforge.net/projects/dirb/
+documentation: https://sourceforge.net/projects/dirb/
+license: GPL-2.0
+binary: dirb
+min_version: 2.22.0
+tested_version: 2.22.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [directory_enumeration, content_discovery]
+outputs: [text]
+version_check:
+  args: []
+  regex: '(?i)DIRB\s+v?([0-9]+\.[0-9]+)'
+  accept_exit_codes: [0, 1]
+install:
+  - method: apt
+    package: dirb
+  - method: manual
+    notes: Use the distribution package.
+usage:
+  target_mode: url
+  url_paths: ["/"]
+invocations:
+  - name: dir-enum
+    description: Runs the supplied wordlist with extensions and recursion.
+    mode: enum
+    args: ["-S", "-w", "-r", "{{wordlist}}", "-o", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+    options:
+      - {name: extensions, flag: "-X", value: ".php,.bak,.txt,.zip,.old,.js,.json,.xml,.config"}
+notes: dirb prints its banner and exits when started without arguments; the version check exploits that.

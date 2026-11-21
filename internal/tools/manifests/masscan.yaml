@@ -1,0 +1,37 @@
+name: masscan
+description: Asynchronous port scanner for very large address ranges.
+category: network
+homepage: https://github.com/robertdavidgraham/masscan
+documentation: https://github.com/robertdavidgraham/masscan
+license: AGPL-3.0
+binary: masscan
+min_version: 1.3.0
+tested_version: 1.3.2
+architectures: [amd64, arm64, 386, arm]
+risk: high
+intrusive: true
+capabilities: [port_discovery, bulk_scanning, cidr_scanning]
+outputs: [text, json, xml]
+version_check:
+  args: ["--version"]
+  regex: '(?i)Masscan version\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: apt
+    package: masscan
+  - method: manual
+    notes: Use the distribution package or a reviewed build of the official repository.
+usage:
+  target_mode: cidr
+  speed_args:
+    3: ["--rate", "2000"]
+    4: ["--rate", "5000"]
+    5: ["--rate", "10000"]
+invocations:
+  - name: top-ports
+    description: Scans the documented top 1000 ports across the target range.
+    mode: recon
+    args: ["--ports", "0-1000", "--banners"]
+    repeat: 2
+    port_discovery: true
+    accept_exit_codes: [0, 1]
+notes: masscan uses raw packets and requires root or CAP_NET_RAW. Verify that egress is permitted for your engagement before scanning large ranges.

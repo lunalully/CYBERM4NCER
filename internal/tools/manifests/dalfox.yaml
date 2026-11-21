@@ -1,0 +1,42 @@
+name: dalfox
+description: Fast XSS scanner and parameter analysis tool.
+category: vulnerability
+homepage: https://github.com/hahwul/dalfox
+documentation: https://dalfox.hahwul.com/
+license: MIT
+binary: dalfox
+min_version: 2.8.0
+tested_version: 2.13.0
+architectures: [amd64, arm64, 386, arm]
+risk: high
+intrusive: true
+capabilities: [xss_detection, parameter_analysis, dom_analysis]
+outputs: [text, json, jsonl]
+version_check:
+  args: ["version"]
+  regex: '(?i)Dalfox\s+v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: go
+    package: github.com/hahwul/dalfox/v2@v2.13.0
+  - method: manual
+    notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+  speed_args:
+    4: ["--worker", "100"]
+    5: ["--worker", "200"]
+invocations:
+  - name: url-scan
+    description: Scans the given URL and its parameters for reflected XSS.
+    mode: vuln
+    args: ["--silence", "--deep-domxss", "--mining-dom", "--output", "{{out}}", "--output-format", "json"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+  - name: crawl-scan
+    description: Crawls the URL and scans every discovered injection point.
+    mode: vuln
+    args: ["--silence", "--crawl", "--output", "{{out}}", "--output-format", "json"]
+    repeat: 2
+    accept_exit_codes: [0, 1]

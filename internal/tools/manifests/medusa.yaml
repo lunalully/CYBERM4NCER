@@ -1,0 +1,43 @@
+name: medusa
+description: Speedy, parallel, modular login brute-forcer.
+category: vulnerability
+homepage: https://github.com/jmk-foofus/medusa
+documentation: https://github.com/jmk-foofus/medusa/wiki
+license: GPL-2.0
+binary: medusa
+min_version: 2.2.0
+tested_version: 2.3.0
+architectures: [amd64, arm64, 386, arm]
+risk: critical
+intrusive: true
+capabilities: [credential_testing, service_bruteforce]
+outputs: [text]
+version_check:
+  args: ["-h"]
+  regex: '(?i)Medusa\s+v?([0-9]+\.[0-9]+)'
+  accept_exit_codes: [0, 1, 2]
+install:
+  - method: apt
+    package: medusa
+  - method: manual
+    notes: Use the distribution package or a reviewed build of the official repository.
+usage:
+  target_mode: cidr
+  default_ports: [21, 22, 23, 25, 110, 143, 389, 445, 1433, 3306, 3389, 5432, 5900, 8080]
+  speed_args:
+    3: ["-t", "16"]
+    4: ["-t", "32"]
+    5: ["-t", "64"]
+invocations:
+  - name: brute-common-protocols
+    description: Tries the supplied user/password lists against common protocols.
+    mode: credential
+    args: []
+    repeat: 2
+    accept_exit_codes: [0, 1, 2]
+    success_regex: '(?i)ACCOUNT FOUND'
+    options:
+      - {name: module, flag: "-M"}
+      - {name: userlist, flag: "-U"}
+      - {name: passlist, flag: "-P"}
+notes: Credential attacks can lock out accounts. Requires operator-supplied wordlists.

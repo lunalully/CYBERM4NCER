@@ -20,4 +20,25 @@ install:
     package: sqlmap
   - method: manual
     notes: Use the distribution package or a reviewed official release.
+usage:
+  target_mode: url
+  url_paths: ["/", "/?id=1", "/index.php?id=1"]
+  speed_args:
+    3: ["--threads", "4", "--level", "3", "--risk", "2"]
+    4: ["--threads", "8", "--level", "5", "--risk", "3"]
+    5: ["--threads", "10", "--level", "5", "--risk", "3"]
+invocations:
+  - name: detect
+    description: Detects SQL injection with crawling and automatic forms.
+    mode: vuln
+    args: ["--batch", "--crawl", "3", "--forms", "--smart", "--output-dir", "{{out}}", "--level", "2", "--risk", "1"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+  - name: deep-assess
+    description: Deep assessment that also enumerates databases and tables.
+    mode: vuln
+    args: ["--batch", "--forms", "--dbs", "--tables", "--output-dir", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+
 notes: Exploitation options require explicit operator confirmation and are never part of automatic profiles.

@@ -1,0 +1,40 @@
+name: wafw00f
+description: Web application firewall detection and fingerprinting.
+category: recon
+homepage: https://github.com/EnableSecurity/wafw00f
+documentation: https://github.com/EnableSecurity/wafw00f
+license: BSD-3-Clause
+binary: wafw00f
+min_version: 2.0.0
+tested_version: 2.2.2
+architectures: [amd64, arm64, 386, arm]
+risk: low
+intrusive: false
+capabilities: [waf_detection, technology_fingerprinting]
+outputs: [text, json]
+version_check:
+  args: ["--version"]
+  regex: '(?i)wafw00f\s*v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: pipx
+    package: wafw00f
+  - method: apt
+    package: wafw00f
+  - method: manual
+    notes: Install from the official repository (PyPI package wafw00f).
+usage:
+  target_mode: url
+  target_flags: ["-a"]
+  url_paths: ["/"]
+invocations:
+  - name: full-detection
+    description: Enumerates every detection plugin against the target URL.
+    mode: recon
+    args: ["-a", "-f", "json", "-o", "{{out}}"]
+    repeat: 1
+  - name: detect-waf
+    description: Enumerates detection plugins and reports only a matching WAF.
+    mode: recon
+    args: ["-a", "-f", "json", "-o", "{{out}}"]
+    repeat: 1
+notes: Python tool. Fails with a traceback when the PyPI dependencies are missing; tools detect reports that as an error state.

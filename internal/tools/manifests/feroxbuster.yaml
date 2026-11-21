@@ -18,9 +18,27 @@ version_check:
 install:
   - method: github_release
     repository: https://github.com/epi052/feroxbuster
-    notes: Verify release checksums before installation.
+    notes: Download the official binary for your architecture.
   - method: cargo
     package: feroxbuster
     notes: Pin the tested release with cargo install feroxbuster --version 2.13.1.
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+  speed_args:
+    3: ["-t", "50"]
+    4: ["-t", "100"]
+    5: ["-t", "150"]
+invocations:
+  - name: dir-enum
+    description: Recursive content discovery with redirects and auto-tuning.
+    mode: enum
+    args: ["-q", "--json", "-d", "5", "-k", "--smart", "--auto-tune", "-o", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+    options:
+      - {name: wordlist, flag: "-w"}
+

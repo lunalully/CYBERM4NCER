@@ -1,5 +1,5 @@
 name: nmap
-description: Port scanning, service detection and network enumeration.
+description: Port scanning, service detection, NSE scripting and network enumeration.
 category: network
 homepage: https://nmap.org/
 documentation: https://nmap.org/book/man.html
@@ -10,7 +10,7 @@ tested_version: 7.95
 architectures: [amd64, arm64]
 risk: medium
 intrusive: true
-capabilities: [port_discovery, service_fingerprinting, network_enumeration]
+capabilities: [port_discovery, service_fingerprinting, os_detection, nse_scripting, network_enumeration]
 outputs: [text, xml]
 version_check:
   args: ["--version"]
@@ -20,3 +20,39 @@ install:
     package: nmap
   - method: manual
     notes: Use the distribution package or the official reviewed release.
+usage:
+  target_mode: cidr
+  speed_args:
+    1: ["-T2"]
+    2: ["-T3"]
+    3: ["-T4"]
+    4: ["-T4"]
+    5: ["-T5"]
+invocations:
+  - name: version-probe
+    description: Fast connect scan of the most common ports to seed later phases.
+    mode: recon
+    args: ["-Pn", "-n", "--top-ports", "1000", "--open"]
+    repeat: 2
+    port_discovery: true
+    accept_exit_codes: [0, 1]
+  - name: service-detect
+    description: Full TCP port scan with service and version detection.
+    mode: enum
+    args: ["-Pn", "-n", "-p-", "-sV", "--version-all", "--script", "banner", "--open"]
+    repeat: 3
+    port_discovery: true
+    accept_exit_codes: [0, 1]
+  - name: default-scripts
+    description: Default NSE scripts for broad service checks.
+    mode: vuln
+    args: ["-Pn", "-n", "-sV", "-sC", "--script", "default,vuln", "--open"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+  - name: udp-top
+    description: UDP scan of the top ports (slow, uses root privileges when available).
+    mode: enum
+    args: ["-Pn", "-n", "-sU", "--top-ports", "200", "--open"]
+    repeat: 2
+    accept_exit_codes: [0, 1]
+notes: SYN, OS detection and UDP scanning require root or CAP_NET_RAW; when run unprivileged nmap falls back to connect scans.

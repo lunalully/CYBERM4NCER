@@ -1,0 +1,38 @@
+name: rustscan
+description: Fast Rust port scanner that hands open ports to nmap.
+category: network
+homepage: https://github.com/bee-san/RustScan
+documentation: https://github.com/bee-san/RustScan/wiki
+license: GPL-3.0
+binary: rustscan
+min_version: 2.1.0
+tested_version: 2.4.1
+architectures: [amd64, arm64, 386]
+risk: medium
+intrusive: true
+capabilities: [port_discovery, service_fingerprinting]
+outputs: [text, json]
+version_check:
+  args: ["--version"]
+  regex: '(?i)rustscan\s+v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: cargo
+    package: rustscan
+    notes: Pin the tested release with cargo install rustscan --version 2.4.1.
+  - method: manual
+    notes: Use the official release from the project repository.
+usage:
+  target_mode: cidr
+  speed_args:
+    3: ["-b", "3000"]
+    4: ["-b", "5000"]
+    5: ["-b", "10000"]
+invocations:
+  - name: all-ports
+    description: Scans all TCP ports and runs nmap service detection on open ones.
+    mode: recon
+    args: ["-a", "-g", "--no-config", "--ulimit", "5000", "--", "-sV", "-Pn"]
+    repeat: 3
+    port_discovery: true
+    accept_exit_codes: [0, 1]
+notes: Requires nmap in PATH for the scripting phase. High batch sizes can cause packet loss and false negatives.

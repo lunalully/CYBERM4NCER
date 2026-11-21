@@ -20,3 +20,23 @@ install:
     package: github.com/projectdiscovery/dnsx/cmd/dnsx@v1.3.1
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: host
+  target_flags: ["-d"]
+invocations:
+  - name: brute
+    description: Brute-forces subdomains with the built-in wordlist.
+    mode: enum
+    args: ["-silent", "-a", "-resp", "-bruteforce"]
+    repeat: 3
+    options:
+      - {name: domain, flag: "-d"}
+      - {name: wordlist, flag: "-w"}
+  - name: resolve
+    description: Resolves names and records A records.
+    mode: recon
+    args: ["-silent", "-a", "-resp"]
+    repeat: 1
+    options:
+      - {name: domain, flag: "-d"}
+

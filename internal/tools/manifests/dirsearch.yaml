@@ -1,0 +1,39 @@
+name: dirsearch
+description: Advanced web path brute-forcer with recursive scanning.
+category: web
+homepage: https://github.com/maurosoria/dirsearch
+documentation: https://github.com/maurosoria/dirsearch
+license: GPL-2.0
+binary: dirsearch
+min_version: 0.4.3
+tested_version: 0.4.3
+architectures: [any]
+risk: medium
+intrusive: true
+capabilities: [directory_enumeration, content_discovery]
+outputs: [text, json, xml, csv]
+version_check:
+  args: ["--version"]
+  regex: '(?i)dirsearch\s+v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+  accept_exit_codes: [0, 1]
+install:
+  - method: apt
+    package: dirsearch
+  - method: manual
+    notes: Use the distribution package or the official repository.
+usage:
+  target_mode: url
+  target_flags: ["-u"]
+  url_paths: ["/"]
+  speed_args:
+    4: ["-t", "100"]
+    5: ["-t", "200"]
+invocations:
+  - name: recursive
+    description: Recursive scan with forced extensions and JSON report.
+    mode: enum
+    args: ["-q", "--recursive", "-e", "php,asp,aspx,jsp,html,js,json,xml,config,bak,old,zip,txt", "-f", "--random-agent", "--format", "json", "-o", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+    options:
+      - {name: wordlist, flag: "-w"}

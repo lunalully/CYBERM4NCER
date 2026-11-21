@@ -1,0 +1,37 @@
+name: wpscan
+description: WordPress vulnerability scanner for plugins, themes, users and credentials.
+category: vulnerability
+homepage: https://github.com/wpscanteam/wpscan
+documentation: https://github.com/wpscanteam/wpscan/wiki
+license: Custom (see upstream)
+binary: wpscan
+min_version: 3.8.0
+tested_version: 3.8.28
+architectures: [any]
+risk: high
+intrusive: true
+capabilities: [cms_vulnerability_detection, plugin_enumeration, user_enumeration, credential_testing]
+outputs: [text, json]
+version_check:
+  args: ["--version"]
+  regex: '(?i)wpscan\s+v?([0-9]+\.[0-9]+\.[0-9]+)'
+install:
+  - method: apt
+    package: wpscan
+  - method: manual
+    notes: Ruby gem from the official repository. The distribution package may need Ruby gem dependencies.
+usage:
+  target_mode: url
+  target_flags: ["--url"]
+  url_paths: ["/"]
+  speed_args:
+    4: ["--max-threads", "50"]
+    5: ["--max-threads", "100"]
+invocations:
+  - name: full-enumeration
+    description: Enumerates vulnerabilities, plugins, themes, users and timthumb.
+    mode: vuln
+    args: ["--no-update", "--no-banner", "--random-user-agent", "-e", "vp,vt,cb,dbe,u1-20", "-f", "json", "-o", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+notes: Version detection fails until the Ruby gem dependencies resolve; tools detect reports the error.

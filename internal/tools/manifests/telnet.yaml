@@ -1,0 +1,34 @@
+name: telnet
+description: Interactive TELNET client used for service banner and login checks.
+category: network
+homepage: https://www.gnu.org/software/inetutils/
+documentation: https://www.gnu.org/software/inetutils/manual/
+license: GPL-3.0-or-later
+binary: telnet
+min_version: 1.9.0
+tested_version: 2.6.0
+architectures: [amd64, arm64, 386, arm]
+risk: medium
+intrusive: true
+capabilities: [banner_grab, service_detection, telnet_login]
+outputs: [text]
+version_check:
+  args: ["--version"]
+  regex: '(?i)telnet\s*\(.*?\)\s*([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: apt
+    package: telnet
+  - method: manual
+    notes: Use the distribution package (inetutils-telnet or telnet-ssl).
+usage:
+  target_mode: hostport
+  default_ports: [23, 2323, 992]
+invocations:
+  - name: banner
+    description: Connects to a TELNET port and captures the service banner.
+    mode: enum
+    uses_captured_ports: true
+    args: []
+    repeat: 3
+    accept_exit_codes: [0, 1]
+notes: TELNET sends credentials and terminal data in clear text. Only use against systems that are explicitly in scope.

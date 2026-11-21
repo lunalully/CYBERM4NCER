@@ -1,0 +1,33 @@
+name: whatweb
+description: Web technology fingerprinting with plugin-based recognition.
+category: recon
+homepage: https://github.com/urbanadventurer/WhatWeb
+documentation: https://github.com/urbanadventurer/WhatWeb/wiki
+license: GPL-2.0
+binary: whatweb
+min_version: 0.5.0
+tested_version: 0.6.1
+architectures: [amd64, arm64, 386, arm]
+risk: low
+intrusive: false
+capabilities: [technology_fingerprinting, cms_detection, web_server_detection]
+outputs: [text, json, xml]
+version_check:
+  args: ["--version"]
+  regex: '(?i)WhatWeb\s+version\s+([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
+install:
+  - method: apt
+    package: whatweb
+  - method: manual
+    notes: Ruby gem from the official project; requires the distribution's Ruby runtime.
+usage:
+  target_mode: url
+  target_flags: ["--url"]
+  url_paths: ["/"]
+invocations:
+  - name: aggressive
+    description: Aggressive plugin level with JSON output.
+    mode: recon
+    args: ["--aggression", "4", "--no-errors", "--log-json={{out}}"]
+    repeat: 3
+notes: In this environment the Debian package is installed but Ruby gem resolution fails; tools detect reports it as an error until the gem dependencies are fixed.

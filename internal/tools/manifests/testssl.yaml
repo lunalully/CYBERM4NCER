@@ -18,6 +18,18 @@ version_check:
 install:
   - method: github_release
     repository: https://github.com/drwetter/testssl.sh
-    notes: Verify release checksums before installation.
+    notes: Download the official release script for your platform.
   - method: manual
     notes: Use a reviewed release of the official repository.
+usage:
+  target_mode: hostport
+  default_ports: [443, 8443, 9443, 465, 993, 995, 636, 853]
+invocations:
+  - name: full
+    description: Full protocol, cipher, header and vulnerability assessment.
+    mode: vuln
+    uses_captured_ports: true
+    args: ["--quiet", "--warnings", "off", "--jsonfile", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+

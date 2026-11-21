@@ -20,3 +20,23 @@ install:
     package: github.com/projectdiscovery/naabu/v2/cmd/naabu@v2.7.0
   - method: manual
     notes: Build from a reviewed release of the official repository.
+usage:
+  target_mode: cidr
+  speed_args:
+    3: ["-rate", "2000"]
+    4: ["-rate", "5000"]
+    5: ["-rate", "10000"]
+invocations:
+  - name: all-ports
+    description: Scans all TCP ports on the target range.
+    mode: recon
+    args: ["-p", "-", "-silent", "-json", "-o", "{{out}}"]
+    repeat: 3
+    port_discovery: true
+  - name: top-ports
+    description: Scans the top 1000 ports with the internal scanner.
+    mode: recon
+    args: ["-top-ports", "1000", "-silent", "-json", "-o", "{{out}}"]
+    repeat: 2
+    port_discovery: true
+

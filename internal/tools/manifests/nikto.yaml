@@ -20,3 +20,18 @@ install:
     package: nikto
   - method: manual
     notes: Use the distribution package or the official reviewed release.
+usage:
+  target_mode: url
+  url_paths: ["/"]
+  speed_args:
+    3: ["-Tuning", "123b"]
+    4: ["-Tuning", "1234567890abc"]
+    5: ["-Tuning", "1234567890abc", "-Pause", "0"]
+invocations:
+  - name: full-scan
+    description: Full plugin run with all tuning classes.
+    mode: vuln
+    args: ["-nointeractive", "-ask", "no", "-Format", "json", "-output", "{{out}}"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+

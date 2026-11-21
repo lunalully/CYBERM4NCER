@@ -37,6 +37,11 @@ type Request struct {
 	Env []string
 	// WorkDir is the process working directory.
 	WorkDir string
+	// ExpectedExitCodes lists exit codes that mean "completed normally".
+	// Some tools print their usage or report "nothing found" with a non-zero
+	// code. When set, those codes produce StatusSuccess; anything else still
+	// fails.
+	ExpectedExitCodes []int
 }
 
 // Result is the outcome of an execution.
@@ -308,6 +313,8 @@ func (r *Runner) Run(ctx context.Context, req Request) (Result, error) {
 	switch {
 	case cmd.ProcessState != nil && cmd.ProcessState.Success():
 		result.Status = StatusSuccess
+	case cmd.ProcessState != nil && containsCode(req.ExpectedExitCodes, result.ExitCode):
+		result.Status = StatusSuccess
 	case errors.Is(runCtx.Err(), context.DeadlineExceeded):
 		result.Status = StatusTimeout
 		result.Error = fmt.Sprintf("timed out after %s", timeout)
@@ -362,6 +369,15 @@ func (r *Runner) Run(ctx context.Context, req Request) (Result, error) {
 		return result, persistErr
 	}
 	return result, nil
+}
+
+func containsCode(codes []int, code int) bool {
+	for _, candidate := range codes {
+		if candidate == code {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runner) persistFinish(ctx context.Context, record Record) error {

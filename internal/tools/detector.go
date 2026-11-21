@@ -80,12 +80,17 @@ func (d *Detector) Detect(ctx context.Context, manifest Manifest) Detection {
 	detection.Found = true
 	detection.Path = path
 
-	result, err := d.runner.Run(ctx, execution.Request{
+	request := execution.Request{
 		Tool:    manifest.Name,
 		Path:    path,
 		Args:    manifest.VersionCheck.Args,
 		Timeout: d.timeout,
-	})
+	}
+	if isExpectDenial(manifest.VersionCheck.AcceptExitCodes) {
+		// Usage-only tools exit non-zero after printing their banner.
+		request.ExpectedExitCodes = manifest.VersionCheck.AcceptExitCodes
+	}
+	result, err := d.runner.Run(ctx, request)
 	if err != nil {
 		detection.Status = DetectionError
 		detection.Error = err.Error()
@@ -96,6 +101,28 @@ func (d *Detector) Detect(ctx context.Context, manifest Manifest) Detection {
 		output = output[:4000]
 	}
 	detection.Raw = output
+	// A version probe that prints a parseable version has answered the
+	// question even if the tool exits non-zero (some tools reject extra
+	// invocations or print usage). Only interruption or missing output is an
+	// error.
+	if version := manifest.VersionFromOutput(output); version != "" && result.Status != execution.StatusTimeout && result.Status != execution.StatusCanceled {
+		compatible, err := CheckMinimum(version, manifest.MinVersion)
+		if err != nil {
+			detection.Status = DetectionUnknown
+			detection.Version = version
+			detection.Error = err.Error()
+			return detection
+		}
+		detection.Version = version
+		detection.Compatible = compatible
+		if !compatible {
+			detection.Status = DetectionIncompatible
+			detection.Error = fmt.Sprintf("version %s is below required %s", version, manifest.MinVersion)
+			return detection
+		}
+		detection.Status = DetectionInstalled
+		return detection
+	}
 	if errors.Is(ctx.Err(), context.Canceled) || result.Status == execution.StatusTimeout || result.Status == execution.StatusCanceled {
 		detection.Status = DetectionError
 		detection.Error = result.Error
@@ -129,6 +156,12 @@ func (d *Detector) Detect(ctx context.Context, manifest Manifest) Detection {
 	}
 	detection.Status = DetectionInstalled
 	return detection
+}
+
+// isExpectDenial reports whether the caller declared non-zero, successful
+// exit codes for the probe.
+func isExpectDenial(codes []int) bool {
+	return len(codes) > 0
 }
 
 // DetectAll probes manifests concurrently while preserving input order.

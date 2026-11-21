@@ -1,0 +1,46 @@
+name: nxc
+description: Network execution toolkit for SMB, SSH, LDAP, WinRM, MSSQL and more.
+category: network
+homepage: https://github.com/Pennyw0rth/NetExec
+documentation: https://www.netexec.wiki/
+license: BSD-2-Clause
+binary: nxc
+min_version: 1.2.0
+tested_version: 1.5.1
+architectures: [amd64, arm64, 386, arm]
+risk: high
+intrusive: true
+capabilities: [smb_enumeration, ssh_enum, ldap_enum, winrm_enum, mssql_enum, credential_testing]
+outputs: [text]
+version_check:
+  args: ["--version"]
+  regex: '^([0-9]+\.[0-9]+\.[0-9]+)\s+'
+  accept_exit_codes: [0, 1]
+install:
+  - method: pipx
+    package: netexec
+  - method: manual
+    notes: Official installation guide recommends pipx from a reviewed release.
+usage:
+  target_mode: cidr
+  default_ports: [22, 139, 445, 389, 636, 1433, 5985, 5986, 88]
+invocations:
+  - name: smb-broad
+    description: Broad SMB enumeration with signing and share listing.
+    mode: enum
+    args: ["smb"]
+    repeat: 3
+    options:
+      - {name: enumeration, flag: "--shares"}
+  - name: smb-null
+    description: Null-session and guest access checks over SMB.
+    mode: enum
+    args: ["smb", "--local-auth"]
+    repeat: 3
+  - name: ssh-enum
+    description: SSH authentication method and banner enumeration.
+    mode: enum
+    args: ["ssh"]
+    repeat: 3
+    accept_exit_codes: [0, 1]
+notes: nxc writes a log directory under the current working directory on first run. Credential modules require operator-supplied accounts.
