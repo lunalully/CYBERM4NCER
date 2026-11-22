@@ -7,6 +7,14 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- The scope is optional. `aggressive` runs against a host, IP, URL or any
+  combination of them without a scope file; passing `-s` (or having a
+  configured/discovered scope) keeps full enforcement: exclusions, port
+  limits and refusal of everything outside. Unscoped runs are audited as
+  `scope.unscoped`.
+
 ### Fixed
 
 - Scanners receive a bare host (or `host:port`) instead of a URL and the

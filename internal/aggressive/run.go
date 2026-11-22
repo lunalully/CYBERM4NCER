@@ -207,8 +207,7 @@ func filterOpen(captures *Captures, pairs []string) []string {
 func scopePairs(plan *Plan, captures *Captures) []string {
 	var allowed []string
 	for _, pair := range captures.OpenHostPorts() {
-		decision, err := plan.Policy.CheckTarget(pair)
-		if err == nil && decision.Allowed {
+		if checkAllowed(plan.Policy, pair) {
 			allowed = append(allowed, pair)
 		}
 	}
@@ -289,12 +288,8 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 	// Every address the command contacts is checked before the process
 	// starts: the primary target plus any protocol address in the argv.
 	for _, checked := range scopeChecks(step, values, kind, effectivePort, scheme, urlOption) {
-		decision, err := plan.Policy.CheckTarget(checked)
-		if err != nil || !decision.Allowed {
-			reason := "invalid target"
-			if err == nil {
-				reason = decision.Reason
-			}
+		if !checkAllowed(plan.Policy, checked) {
+			reason := guardReason(plan.Policy, checked)
 			report("%s/%s: refused, %s", step.Tool, step.Invocation, reason)
 			return StepResult{Step: step, Target: target, Skipped: true, Error: "scope denied: " + reason}
 		}

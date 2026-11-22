@@ -11,8 +11,6 @@ import (
 )
 
 var (
-	// ErrScopeRequired prevents target-facing execution without a policy.
-	ErrScopeRequired = errors.New("scope policy is required for target-facing execution")
 	// ErrTargetRequired prevents execution without an auditable target.
 	ErrTargetRequired = errors.New("target is required for target-facing execution")
 )
@@ -26,18 +24,24 @@ func (e *ScopeDeniedError) Error() string {
 	return fmt.Sprintf("scope denied: %s (%s)", e.Decision.Target, e.Decision.Reason)
 }
 
-// ExecuteScoped is the only target-facing execution entry point.
+// ExecuteScoped is the target-facing execution entry point.
 //
-// It fails closed: a missing policy, missing target, denied scope or audit
-// failure prevents the process from running. The raw runner is private to the
-// core so modules cannot bypass this check accidentally.
+// The scope policy is optional: with a policy every target is checked and the
+// decision is audited; without one the target is used as given and the run is
+// audited as unscoped. A missing target or an audit failure still prevents the
+// process from running.
 func (c *Core) ExecuteScoped(ctx context.Context, policy *scope.Policy, request execution.Request) (execution.Result, error) {
-	if policy == nil {
-		return execution.Result{}, ErrScopeRequired
-	}
 	request.Target = strings.TrimSpace(request.Target)
 	if request.Target == "" {
 		return execution.Result{}, ErrTargetRequired
+	}
+	if policy == nil {
+		if err := c.DB.AppendAudit(ctx, "core", "scope.unscoped", request.Target, map[string]any{
+			"tool": request.Tool,
+		}); err != nil {
+			return execution.Result{}, fmt.Errorf("record unscoped execution: %w", err)
+		}
+		return c.runner.Run(ctx, request)
 	}
 	decision, err := policy.CheckTarget(request.Target)
 	if err != nil {

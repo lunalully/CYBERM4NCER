@@ -1,7 +1,9 @@
 # Scope Engine
 
-Scope is the authorization boundary. It is evaluated before target-facing work
-and cannot be disabled by a module.
+Scope is an optional authorization boundary. When a scope file is supplied it
+is evaluated before target-facing work and cannot be bypassed by a module;
+without a scope file targets are used as given and the run is audited as
+unscoped.
 
 ## File format
 

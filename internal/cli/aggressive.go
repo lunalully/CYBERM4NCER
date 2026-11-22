@@ -12,6 +12,7 @@ import (
 	"github.com/lunalully/cyberm4ncer/internal/core"
 	"github.com/lunalully/cyberm4ncer/internal/database"
 	"github.com/lunalully/cyberm4ncer/internal/id"
+	"github.com/lunalully/cyberm4ncer/internal/scope"
 	"github.com/lunalully/cyberm4ncer/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -41,15 +42,18 @@ func newAggressiveCmd(opts *rootOptions) *cobra.Command {
 one to the configured quota, chains discovered open ports into the next round
 and records every execution.
 
-The target must be inside the authorized scope. Output streams are written to
-artifacts and executions are stored in the local database.
+A scope file is optional: give a host, IP and/or URL and the run starts there.
+When a scope file is supplied (-s, configured or discovered), every target is
+checked against it and anything outside is refused. Output streams are written
+to artifacts and executions are stored in the local database.
 
 Nothing runs until --execute is given; without it the exact plan is printed.
 
 Targets can be given as arguments or one per line with --file, including
 comments (#). Use --max-steps to cap a large campaign (0 is unlimited).`,
-		Example: `  cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml
-  cyberm4ncer aggressive https://app.example.com --scope engagement.yaml --mode all --level 5 --execute
+		Example: `  cyberm4ncer aggressive 10.0.0.5 --mode all --level 5 --execute
+  cyberm4ncer aggressive app.example.com 10.0.0.5 https://app.example.com --execute
+  cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --mode all --execute
   cyberm4ncer aggressive 10.0.0.0/24 --scope engagement.yaml --mode enum --repeat 3 --execute
   cyberm4ncer aggressive --file targets.txt --scope engagement.yaml --execute`,
 		Args: cobra.ArbitraryArgs,
@@ -58,7 +62,7 @@ comments (#). Use --max-steps to cap a large campaign (0 is unlimited).`,
 		},
 	}
 	flags := cmd.Flags()
-	flags.StringVarP(&options.scopeFile, "scope", "s", "", "scope file (default: configured or discovered)")
+	flags.StringVarP(&options.scopeFile, "scope", "s", "", "optional scope file (default: configured, discovered, or none)")
 	flags.StringVar(&options.mode, "mode", "all", "tool selection: all, recon, enum, vuln")
 	flags.IntVar(&options.level, "level", 5, "intensity from 1 (gentle) to 5 (maximum speed args)")
 	flags.IntVar(&options.repeat, "repeat", 0, "cap for repetitions (0 keeps the reviewed values)")
@@ -82,7 +86,7 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 	if err != nil {
 		return err
 	}
-	policy, scopePath, err := resolvePolicy(root, options.scopeFile)
+	policy, scopePath, err := resolveOptionalPolicy(root, options.scopeFile)
 	if err != nil {
 		return err
 	}
@@ -335,7 +339,11 @@ func printAggressivePlan(printer *ui.Printer, plan *aggressive.Plan, scopePath s
 		})
 	}
 	printer.Infof("target: %s", plan.Target)
-	printer.Infof("authorization scope: %s", scopePath)
+	if scopePath != "" {
+		printer.Infof("authorization scope: %s", scopePath)
+	} else {
+		printer.Infof("authorization scope: none (targets are used as given)")
+	}
 	printer.Infof("mode: %s | level: %d | repeat quota: %d", plan.Mode.Name, plan.Mode.Level, plan.Mode.RepeatQuota)
 	printer.Infof("tools (%d): %s", len(plan.Tools), strings.Join(plan.Tools, ", "))
 	printer.Infof("planned invocations: %d (rounds: %d)", countSteps(plan), plan.Repeats)
@@ -388,12 +396,16 @@ func hasExpansion(plan *aggressive.Plan) bool {
 // recordPlan creates the project if needed, opens the operation and writes the
 // plan to the audit chain before any command runs.
 func (r *aggressiveRun) recordPlan(ctx context.Context, plan *aggressive.Plan) (string, string, error) {
-	project, err := r.App.DB.GetProjectByName(ctx, plan.Policy.Project)
+	projectName, authorization := "unscoped", "no scope file supplied"
+	if policy := planPolicy(plan); policy != nil {
+		projectName, authorization = policy.Project, "authorization: "+policy.Authorization
+	}
+	project, err := r.App.DB.GetProjectByName(ctx, projectName)
 	if err != nil {
 		project = database.Project{
 			ID:          id.New("proj"),
-			Name:        plan.Policy.Project,
-			Description: "authorization: " + plan.Policy.Authorization,
+			Name:        projectName,
+			Description: authorization,
 			CreatedAt:   time.Now().UTC(),
 		}
 		if createErr := r.App.DB.CreateProject(ctx, project); createErr != nil {
@@ -420,7 +432,7 @@ func (r *aggressiveRun) recordPlan(ctx context.Context, plan *aggressive.Plan) (
 		"repeat":       r.Mode.RepeatQuota,
 		"invocations":  countSteps(plan),
 		"tools":        plan.Tools,
-		"scope":        plan.Policy.Project,
+		"scope":        projectName,
 	}); err != nil {
 		return project.ID, operationID, fmt.Errorf("audit plan: %w", err)
 	}
@@ -465,4 +477,15 @@ func errorText(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// planPolicy returns the scope policy a plan was built with, or nil.
+func planPolicy(plan *aggressive.Plan) *scope.Policy {
+	if plan == nil {
+		return nil
+	}
+	if adapter, ok := plan.Policy.(interface{ ScopePolicy() *scope.Policy }); ok {
+		return adapter.ScopePolicy()
+	}
+	return nil
 }

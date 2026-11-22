@@ -71,6 +71,47 @@ func DefaultExtensions() string { return ".php,.html,.txt,.bak,.zip,.json,.xml,.
 // ScopeDenied is returned when the target is outside the authorized scope.
 var ScopeDenied = fmt.Errorf("target is outside the authorized scope")
 
+// Guard authorizes individual targets. It is optional: without one the engine
+// runs against whatever target the operator supplied.
+type Guard interface {
+	// CheckTarget reports whether a host, host:port, IP, CIDR or URL may be
+	// contacted. A nil Guard allows everything.
+	CheckTarget(target string) (GuardDecision, error)
+}
+
+// GuardDecision is the outcome of one authorization check.
+type GuardDecision struct {
+	Allowed bool
+	Target  string
+	Reason  string
+	// Project and Authorization name the engagement, when a scope file was
+	// supplied.
+	Project       string
+	Authorization string
+}
+
+// checkAllowed asks the guard, if any. Without a guard every target is
+// allowed and nothing is checked.
+func checkAllowed(guard Guard, target string) bool {
+	if guard == nil {
+		return true
+	}
+	decision, err := guard.CheckTarget(target)
+	return err == nil && decision.Allowed
+}
+
+// guardReason returns the refusal reason of a guard, for reporting.
+func guardReason(guard Guard, target string) string {
+	if guard == nil {
+		return ""
+	}
+	decision, err := guard.CheckTarget(target)
+	if err != nil {
+		return "invalid target"
+	}
+	return decision.Reason
+}
+
 // Context carries values substituted into invocation templates.
 type Context struct {
 	Target   string
@@ -231,7 +272,8 @@ func (s Step) MarshalJSON() ([]byte, error) {
 // Plan is the full command list for an operation.
 type Plan struct {
 	Target string
-	Policy *scope.Policy
+	// Policy is the optional authorization guard (nil means no scope).
+	Policy Guard
 	// Registry resolves manifests when a step must be re-checked at run time.
 	Registry *tools.Registry
 	// TargetURL keeps the URL the operator typed (empty for bare targets) so
@@ -309,6 +351,12 @@ func (m Mode) speedArgs(manifest tools.Manifest) []string {
 
 // Plan builds the steps for a target after validating its scope.
 func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
+	return p.PlanGuarded(target, policyGuard{policy: policy})
+}
+
+// PlanGuarded builds a plan with an optional authorization guard. A nil guard
+// means no scope: the target is used as given.
+func (p *Planner) PlanGuarded(target string, guard Guard) (*Plan, error) {
 	if p == nil || p.Registry == nil {
 		return nil, fmt.Errorf("planner requires a tool registry")
 	}
@@ -316,18 +364,20 @@ func (p *Planner) Plan(target string, policy *scope.Policy) (*Plan, error) {
 	if target == "" {
 		return nil, fmt.Errorf("target is required")
 	}
-	if policy == nil {
-		return nil, ScopeDenied
-	}
-	decision, err := policy.CheckTarget(target)
-	if err != nil {
-		return nil, fmt.Errorf("evaluate scope for %q: %w", target, err)
-	}
-	if !decision.Allowed {
-		return nil, fmt.Errorf("%w: %s", ScopeDenied, decision.Reason)
+	if guard != nil {
+		decision, err := guard.CheckTarget(target)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate scope for %q: %w", target, err)
+		}
+		if !decision.Allowed {
+			return nil, fmt.Errorf("%w: %s", ScopeDenied, decision.Reason)
+		}
 	}
 
-	plan := &Plan{Target: target, Policy: policy, Mode: p.Mode, Registry: p.Registry, TargetURL: baseContext(target).URL}
+	plan := &Plan{Target: target, Policy: guard, Mode: p.Mode, Registry: p.Registry, TargetURL: baseContext(target).URL}
+	if adapter, ok := guard.(policyGuard); !ok || adapter.policy == nil {
+		plan.Policy = nil
+	}
 	base := baseContext(target)
 	if p.Mode.Wordlist != "" {
 		base.Options[KeyWordlist] = p.Mode.Wordlist
@@ -483,6 +533,33 @@ func baseContext(target string) Context {
 		},
 	}
 }
+
+// policyGuard adapts a scope policy to the Guard interface; a nil policy
+// guards nothing.
+type policyGuard struct{ policy *scope.Policy }
+
+// ScopePolicy returns the underlying scope policy, or nil.
+func (g policyGuard) ScopePolicy() *scope.Policy { return g.policy }
+
+func (g policyGuard) CheckTarget(target string) (GuardDecision, error) {
+	if g.policy == nil {
+		return GuardDecision{Allowed: true, Target: target, Reason: "no scope supplied"}, nil
+	}
+	decision, err := g.policy.CheckTarget(target)
+	if err != nil {
+		return GuardDecision{}, err
+	}
+	return GuardDecision{
+		Allowed:       decision.Allowed,
+		Target:        decision.Target,
+		Reason:        decision.Reason,
+		Project:       g.policy.Project,
+		Authorization: g.policy.Authorization,
+	}, nil
+}
+
+// Unscoped reports whether the plan authorizes targets through a guard at all.
+func (p *Plan) Unscoped() bool { return p == nil || p.Policy == nil }
 
 // Resolved reports whether every placeholder in a template has a value.
 func Resolved(template string, values Context) bool {

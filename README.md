@@ -6,10 +6,10 @@ CYBERM4NCER is a Linux-first framework for authorized security assessments. It
 provides one consistent interface for scoped reconnaissance, web/API testing,
 vulnerability assessment, execution history, normalized results and reporting.
 
-> **Authorized testing only.** Every external target must be covered by an
-> explicit scope file containing a written authorization reference. The
-> framework denies targets that are not covered. You are responsible for
-> having permission to test every asset you touch.
+> **Authorized testing only.** You are responsible for having written
+> permission to test every asset you touch. Scope files are optional: pass one
+> with `-s` and every target is checked against it (exclusions win, ports are
+> limited); without one the tool scans the host, IP or URL you give.
 
 ## Status
 
@@ -73,13 +73,16 @@ cyberm4ncer config init
 cyberm4ncer config show
 cyberm4ncer tools list
 cyberm4ncer tools detect
+cyberm4ncer aggressive 10.0.0.5                                  # plan only
+cyberm4ncer aggressive 10.0.0.5 --execute                        # run it
+cyberm4ncer aggressive app.example.com 203.0.113.10 --execute    # several targets
 cyberm4ncer scope validate engagement.yaml
 cyberm4ncer scope check app.example.com --file engagement.yaml
-cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml          # plan only
-cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute # run
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute # run with a scope
 ```
 
-A scope file must be explicit:
+A scope file is optional. When you supply one, it is enforced before every
+execution:
 
 ```yaml
 version: 1

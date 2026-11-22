@@ -22,6 +22,25 @@ at least one include rule. Exclusions always take precedence.`,
 	return cmd
 }
 
+// resolveOptionalPolicy returns the scope policy when a scope file can be
+// found and nil when there is none. The scope is optional: without it targets
+// are used as given.
+func resolveOptionalPolicy(opts *rootOptions, explicit string) (*scope.Policy, string, error) {
+	cfg, meta, err := loadConfig(opts)
+	if err != nil {
+		return nil, "", err
+	}
+	path := config.DiscoverScopeFile(explicit, cfg, meta.Paths)
+	if path == "" {
+		return nil, "", nil
+	}
+	policy, err := scope.Load(path)
+	if err != nil {
+		return nil, path, err
+	}
+	return policy, path, nil
+}
+
 func resolvePolicy(opts *rootOptions, explicit string) (*scope.Policy, string, error) {
 	cfg, meta, err := loadConfig(opts)
 	if err != nil {

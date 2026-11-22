@@ -98,11 +98,13 @@ tool is missing, incompatible or unverified.
 
 Plans (default) or runs the exhaustive repeated scan described in
 [`AGGRESSIVE_ENGINE.md`](AGGRESSIVE_ENGINE.md). Targets may be positional
-arguments or listed in `--file`, and the same scope policy is enforced for each.
+arguments or listed in `--file`. Without a scope file every target is used as
+given; with one, the same policy is enforced for each target and every
+per-port fan-out.
 
 | Flag | Meaning |
 |---|---|
-| `--scope/-s` | Scope file |
+| `--scope/-s` | Optional scope file (configured/discovered file is used when present) |
 | `--file/-f` | File with one target per line (`#` comments allowed) |
 | `--mode` | `all`, `recon`, `enum`, `vuln` |
 | `--level` | 1..5 speed arguments |

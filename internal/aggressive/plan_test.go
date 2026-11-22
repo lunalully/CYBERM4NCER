@@ -49,8 +49,13 @@ func TestPlanRefusesOutOfScopeTarget(t *testing.T) {
 	if _, err := planner.Plan("out.example.com", mustPolicy(t)); err == nil {
 		t.Fatal("expected exclusion to deny the target")
 	}
-	if _, err := planner.Plan("example.com", nil); err == nil {
-		t.Fatal("expected missing policy to deny the target")
+	// No scope means no check: the target is planned as given.
+	plan, err := planner.Plan("some.unknown.host", nil)
+	if err != nil {
+		t.Fatalf("unscoped plan: %v", err)
+	}
+	if plan.Target != "some.unknown.host" || !plan.Unscoped() || len(plan.Steps) == 0 {
+		t.Fatalf("unscoped plan = %q, steps %d", plan.Target, len(plan.Steps))
 	}
 }
 
@@ -403,4 +408,20 @@ func TestSuccessRegexMatchesHydra(t *testing.T) {
 
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
+}
+
+func TestPlanWithoutScopeRunsEveryTarget(t *testing.T) {
+	planner := &Planner{Registry: mustRegistry(t), Mode: DefaultMode()}
+	for _, target := range []string{"10.0.0.5", "app.example.net", "https://10.0.0.7:8443", "10.0.0.0/24"} {
+		plan, err := planner.Plan(target, nil)
+		if err != nil {
+			t.Fatalf("%s: %v", target, err)
+		}
+		if !plan.Unscoped() {
+			t.Fatalf("%s: plan is not unscoped", target)
+		}
+		if plan.Target != target || len(plan.Steps) == 0 {
+			t.Fatalf("%s: plan = %q with %d steps", target, plan.Target, len(plan.Steps))
+		}
+	}
 }

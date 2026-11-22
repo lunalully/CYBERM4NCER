@@ -9,20 +9,24 @@ no built-in throttling beyond what each manifest declares.
 
 ## Guarantees
 
-- The target, every discovered asset and every per-port fan-out are checked
-  against the scope policy **before** the process starts. A refused step is
-  reported and skipped; nothing outside the scope ever executes.
 - Nothing runs without `--execute`; the default prints the exact plan.
 - Commands are argv arrays from reviewed manifests, never shell strings.
 - Every execution has a timeout, process-group cancellation, artifact files
   and a database record.
 - Each target gets its own operation; the plan and the summary are written to
   the audit chain.
+- **Scope is optional.** With `-s` (or a configured scope file) the target,
+  every discovered asset and every per-port fan-out are checked against the
+  policy **before** the process starts; a refused step is reported and
+  skipped. Without a scope file the targets are used as given and each run is
+  audited as `scope.unscoped`.
 
 ## Usage
 
 ```bash
 # Plan only: tools, invocations, rounds and skips.
+cyberm4ncer aggressive 10.0.0.5
+# With an optional scope file, anything outside it is refused.
 cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml
 
 # Run everything at maximum intensity against one host.

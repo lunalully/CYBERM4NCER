@@ -1,7 +1,8 @@
 # COMO USAR — guia rápido
 
-CYBERM4NCER só corre contra alvos que estejam **declarados num ficheiro de scope**
-com uma autorização escrita. Fora do scope, tudo é recusado.
+Precisas de **um alvo** e nada mais: host, IP, URL ou vários. O **scope é
+opcional** — se passares `-s`, ele é aplicado e recusa o que estiver fora; se
+não passares, o scan corre contra o alvo que deres.
 
 ## 0. Compilar e ver se está tudo bem
 
@@ -19,7 +20,24 @@ make build                 # cria ./dist/cyberm4ncer
 ./dist/cyberm4ncer tools info nmap     # tudo o que o manifesto do nmap permite
 ```
 
-## 2. Criar o scope (obrigatório)
+## 2. Correr (sem scope, o mais rápido)
+
+```bash
+# plano apenas (nada é executado)
+./dist/cyberm4ncer aggressive example.com
+
+# correr
+./dist/cyberm4ncer aggressive example.com --execute
+
+# IP, domínio, URL ou vários ao mesmo tempo
+./dist/cyberm4ncer aggressive 203.0.113.10 --execute
+./dist/cyberm4ncer aggressive app.example.com 203.0.113.10 https://staging.example.com --execute
+./dist/cyberm4ncer aggressive -f alvos.txt --execute
+```
+
+Sem scope o plano mostra `authorization scope: none (targets are used as given)`.
+
+## 2b. Scope (opcional)
 
 Cria `engagement.yaml`:
 
@@ -40,15 +58,14 @@ excludes:            # opcional, mas tem sempre prioridade
 ports: [80, 443]     # opcional: se existir, só estas portas são autorizadas
 ```
 
-Testar o scope antes de correr qualquer coisa:
+Com `-s`, tudo o que cai fora do scope é recusado (`refused, ...`) e nunca
+corre; `ports:` limitado corta as portas fora do âmbito. Testar o scope antes:
 
 ```bash
 ./dist/cyberm4ncer scope validate engagement.yaml
 ./dist/cyberm4ncer scope check example.com --file engagement.yaml
 ./dist/cyberm4ncer scope check billing.example.com --file engagement.yaml   # deve recusar
 ```
-
-## 3. O comando principal: `aggressive`
 
 Por omissão **só mostra o plano** — nada é executado.
 
@@ -64,7 +81,7 @@ Flags úteis:
 
 | Flag | Para quê |
 |---|---|
-| `-s, --scope` | ficheiro de scope |
+| `-s, --scope` | ficheiro de scope (opcional) |
 | `--execute` | executa (sem isto é só plano) |
 | `--mode` | `recon` (só descoberta), `enum` (enumeração), `vuln` (scripts/vuln), `all` |
 | `--level` | 1 (suave) a 5 (máximo, por omissão) |
@@ -126,7 +143,6 @@ round 1 nmap/version-probe: skipped, missing option(s) wordlist
 ## 6. Regras de ouro
 
 1. Sem `--execute` nada corre.
-2. Alvo fora do scope = recusado, sempre.
-3. `excludes` ganha a `includes`.
-4. `ports` limitado corta o que sai do âmbito.
-5. Só testar o que tens autorização escrita para testar.
+2. Sem `-s` não há scope: o alvo é usado tal como o escreves.
+3. Com `-s`, alvo fora do scope é recusado e `excludes` ganha a `includes`.
+4. Só testar o que tens autorização escrita para testar.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/url"
 	"os"
@@ -29,6 +30,8 @@ type fakePerformer struct {
 	calls atomic.Int32
 	mu    sync.Mutex
 	seen  []execution.Request
+	// allowAll disables the local host check (the engine runs unscoped).
+	allowAll bool
 }
 
 func (f *fakePerformer) requests() []execution.Request {
@@ -43,7 +46,7 @@ func (f *fakePerformer) run(ctx context.Context, req execution.Request) (executi
 	f.seen = append(f.seen, req)
 	f.mu.Unlock()
 	result := execution.Result{ID: "exec_test", Tool: req.Tool, Status: execution.StatusSuccess}
-	if req.Target != "" && !fakeScoped(req.Target) {
+	if req.Target != "" && !f.allowAll && !fakeScoped(req.Target) {
 		return result, &scopeDeniedError{message: "scope denied: " + req.Target}
 	}
 	if len(req.Args) == 0 {
@@ -485,5 +488,33 @@ ports: [445]
 	}
 	if performer.calls.Load() != 0 {
 		t.Fatal("process started for an out-of-scope implied port")
+	}
+}
+
+func TestExecutorWithoutScopeExecutesAndAuditsNothing(t *testing.T) {
+	// No guard: a host that no scope would ever include is still scanned,
+	// and the executor asks no policy.
+	registry := fakeRegistry(t, map[string]string{"scanner": "echo scanned"}, nil)
+	performer := &fakePerformer{}
+	performer.allowAll = true
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	planner := &Planner{Registry: registry, Mode: Mode{Name: "all", Level: 5, RepeatQuota: 1, IncludeIntrusive: true}}
+	plan, err := planner.Plan("203.0.113.9", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := executor.Run(context.Background(), plan, Operation{Progress: io.Discard})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Steps == 0 || performer.calls.Load() == 0 {
+		t.Fatalf("unscoped plan did not run: %+v", summary)
+	}
+	// Port-dependent steps are skipped only when no open port was captured,
+	// never because of a scope decision.
+	for _, result := range summary.Results {
+		if result.Skipped && result.Error != "no captured ports" {
+			t.Fatalf("%s/%s skipped: %s", result.Step.Tool, result.Step.Invocation, result.Error)
+		}
 	}
 }

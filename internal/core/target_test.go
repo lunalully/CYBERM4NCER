@@ -68,10 +68,12 @@ includes:
 		t.Fatalf("status = %s (%s)", result.Status, result.Error)
 	}
 
+	// Without a scope policy the target is used as given and the run is
+	// audited as unscoped.
 	if _, err := app.ExecuteScoped(context.Background(), nil, execution.Request{
 		Tool: "sh", Target: "example.com",
-	}); !errors.Is(err, ErrScopeRequired) {
-		t.Fatalf("nil policy error = %v", err)
+	}); err != nil {
+		t.Fatalf("unscoped execution: %v", err)
 	}
 	if _, err := app.ExecuteScoped(context.Background(), policy, execution.Request{
 		Tool: "sh", Target: "   ",
@@ -83,14 +85,15 @@ includes:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !verification.Valid || verification.Entries != 2 {
-		t.Fatalf("audit = %+v, want 2 valid entries", verification)
+	if !verification.Valid || verification.Entries != 3 {
+		t.Fatalf("audit = %+v, want 3 valid entries", verification)
 	}
 	stats, err := app.DB.Stats(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.Executions != 1 {
-		t.Fatalf("executions = %d, want 1", stats.Executions)
+	// One allowed scoped run plus one unscoped run.
+	if stats.Executions != 2 {
+		t.Fatalf("executions = %d, want 2", stats.Executions)
 	}
 }
