@@ -11,6 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// hubInteractive is the terminal probe the hub command consults. It is a
+// variable so tests can exercise the startup path without a pseudo-terminal.
+var hubInteractive = interactive
+
 // interactive reports whether the Operations Hub can run: both streams must
 // be terminals, otherwise the plain help is printed instead.
 func interactive(opts *rootOptions) bool {
@@ -54,7 +58,7 @@ it is enforced before every command.`,
   cyberm4ncer hub 10.0.0.5 --mode recon`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !interactive(opts) {
+			if !hubInteractive(opts) {
 				return fmt.Errorf("the Operations Hub needs a terminal; run it from an interactive shell")
 			}
 			options := &aggressiveOptions{
@@ -73,7 +77,9 @@ it is enforced before every command.`,
 			default:
 				return fmt.Errorf("invalid mode %q (all, recon, enum, vuln)", mode)
 			}
-			targets, err := aggressiveTargets(args, file)
+			// Targets are optional: the hub asks for them inside the session,
+			// so an empty list starts the app instead of aborting the command.
+			targets, err := collectTargets(args, file)
 			if err != nil {
 				return err
 			}

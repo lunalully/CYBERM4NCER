@@ -447,6 +447,20 @@ func (r *aggressiveRun) recordPlan(ctx context.Context, plan *aggressive.Plan) (
 
 // aggressiveTargets collects positional targets and --file entries.
 func aggressiveTargets(args []string, file string) ([]string, error) {
+	targets, err := collectTargets(args, file)
+	if err != nil {
+		return nil, err
+	}
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("a target argument or --file is required")
+	}
+	return targets, nil
+}
+
+// collectTargets gathers positional targets and --file entries without
+// requiring any. Errors while reading the file are still reported, so a
+// missing or unreadable list never silently turns into an empty session.
+func collectTargets(args []string, file string) ([]string, error) {
 	seen := map[string]bool{}
 	var targets []string
 	add := func(target string) {
@@ -471,9 +485,6 @@ func aggressiveTargets(args []string, file string) ([]string, error) {
 			}
 			add(line)
 		}
-	}
-	if len(targets) == 0 {
-		return nil, fmt.Errorf("a target argument or --file is required")
 	}
 	return targets, nil
 }
