@@ -58,7 +58,19 @@ func (u *UI) SetContext(lines []string) { u.ContextLines = lines }
 // Choose shows a menu and returns the selected item. An empty item with a nil
 // error means the operator asked to go back.
 func (u *UI) Choose(menu Menu) (Item, error) {
-	u.draw(menu)
+	return u.choose(menu, true)
+}
+
+// ChooseDrawn is Choose for a menu the caller already rendered, such as the
+// home screen printed by Home. It reads input without drawing the menu again.
+func (u *UI) ChooseDrawn(menu Menu) (Item, error) {
+	return u.choose(menu, false)
+}
+
+func (u *UI) choose(menu Menu, drawFirst bool) (Item, error) {
+	if drawFirst {
+		u.draw(menu)
+	}
 	for {
 		fmt.Fprint(u.Out, u.Printer.Paint("› "))
 		line, err := u.readLine()

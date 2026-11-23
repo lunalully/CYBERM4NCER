@@ -41,7 +41,7 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	a.printHome()
 	for {
-		item, err := a.UI.Choose(a.mainMenu())
+		item, err := a.UI.ChooseDrawn(a.mainMenu())
 		if err == io.EOF {
 			fmt.Fprintln(a.Out)
 			return nil

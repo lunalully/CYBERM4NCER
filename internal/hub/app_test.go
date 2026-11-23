@@ -196,3 +196,18 @@ func newReader(input string) *bufio.Reader { return bufio.NewReader(strings.NewR
 
 // errInvalid is the plan error used by the failure test.
 var errInvalid = errors.New("invalid target")
+
+func TestHomeScreenIsDrawnOnce(t *testing.T) {
+	// The header screen already carries the menu; asking for a choice must not
+	// print the same menu a second time.
+	app, out := newTestApp(t, "0\n", &fakeService{})
+	if err := app.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(out.String(), "OPERATIONS HUB"); n != 1 {
+		t.Fatalf("main menu printed %d times, want 1:\n%s", n, out.String())
+	}
+	if n := strings.Count(out.String(), "scope: none"); n != 1 {
+		t.Fatalf("session panel printed %d times, want 1:\n%s", n, out.String())
+	}
+}

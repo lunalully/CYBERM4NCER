@@ -45,6 +45,9 @@ Versioning: [Semantic Versioning](https://semver.org/).
 - `wafw00f` takes its target positionally (`-a` means aggressive mode).
 - The reviewed target flag is never added when the argv already carries
   `{{host}}`, `{{hostport}}` or `{{url}}`.
+- The Operations Hub no longer draws the startup screen twice: the header
+  screen already prints the menu, so the first prompt now reads input without
+  rendering the same menu again.
 
 ### Added
 
