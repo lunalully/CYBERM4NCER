@@ -124,6 +124,7 @@ per-port fan-out.
 | `--no-intrusive` | Skip intrusive tools |
 | `--wordlist` | Web wordlist (default `execution.wordlist`) |
 | `--userlist`, `--passlist` | Credential lists for hydra/medusa |
+| `--stream` | Stream each tool's stdout/stderr live to stderr |
 
 Exit codes: 0 success or plan-only, 1 error or scope denial, 130 interrupted.
 `--json` prints the plan or the campaign summary as JSON.

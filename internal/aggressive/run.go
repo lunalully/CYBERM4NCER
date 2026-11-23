@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lunalully/cyberm4ncer/internal/execution"
 	"github.com/lunalully/cyberm4ncer/internal/tools"
@@ -50,6 +51,9 @@ type Operation struct {
 	MaxSteps int
 	// Progress receives human-readable events; may be nil.
 	Progress io.Writer
+	// Stream receives the live stdout and stderr of every process in
+	// addition to the artifact files; may be nil.
+	Stream io.Writer
 }
 
 // Summary is the final report of a run.
@@ -129,6 +133,7 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 	}
 
 	var expansions []Step
+	attempts := 0
 	for _, step := range plan.Steps {
 		if step.Expand {
 			expansions = append(expansions, step)
@@ -138,7 +143,8 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 			break
 		}
 		// Each round of a discovery step re-scans and can find new assets.
-		record(e.runStep(ctx, plan, step, captures, op, artifactRoot, maxRead, report))
+		attempts++
+		record(e.runStep(ctx, plan, step, captures, op, artifactRoot, maxRead, attempts, report))
 	}
 	// Port-dependent steps run once per captured open port for each planned
 	// round.
@@ -175,7 +181,8 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 				expanded.Target = pair
 				expanded.Port = port
 				expanded.TargetURL = ""
-				record(e.runStep(ctx, plan, expanded, captures, op, artifactRoot, maxRead, report))
+				attempts++
+				record(e.runStep(ctx, plan, expanded, captures, op, artifactRoot, maxRead, attempts, report))
 			}
 		}
 	}
@@ -185,6 +192,8 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 	if len(summary.Matches) > 0 {
 		report("note: %d credential/success match(es) found", len(summary.Matches))
 	}
+	report("target %s finished: %d step(s) - %d ok, %d failed, %d skipped, %d discovered",
+		plan.Target, summary.Steps, summary.Succeeded, summary.Failed, summary.Skipped, summary.Discovered)
 	return summary, nil
 }
 
@@ -214,8 +223,9 @@ func scopePairs(plan *Plan, captures *Captures) []string {
 	return allowed
 }
 
-func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures *Captures, op Operation, artifactRoot string, maxRead int64, report func(string, ...any)) StepResult {
+func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures *Captures, op Operation, artifactRoot string, maxRead int64, attempt int, report func(string, ...any)) StepResult {
 	if err := ctx.Err(); err != nil {
+		report("[%d] CANCELED %s/%s: %v", attempt, step.Tool, step.Invocation, err)
 		return StepResult{Step: step, Status: execution.StatusCanceled, Error: err.Error()}
 	}
 	target := strings.TrimSpace(step.Target)
@@ -273,7 +283,7 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		}
 	}
 	if missing := unresolvedServiceOptions(step, values); len(missing) > 0 {
-		report("%s/%s: skipped, missing option(s) %s", step.Tool, step.Invocation, strings.Join(missing, ", "))
+		report("[%d] %s/%s: skipped, missing option(s) %s", attempt, step.Tool, step.Invocation, strings.Join(missing, ", "))
 		return StepResult{Step: step, Target: target, Skipped: true, Error: "missing option: " + strings.Join(missing, ",")}
 	}
 	if op.DataDir != "" {
@@ -281,7 +291,7 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		values.Out = fmt.Sprintf("%s/aggressive/%s/%s-%s/report", op.DataDir, key, step.Tool, step.Invocation)
 		// Tools fail when their report directory is missing; create it first.
 		if err := os.MkdirAll(filepath.Dir(values.Out), 0o700); err != nil {
-			report("%s/%s: cannot create report directory: %v", step.Tool, step.Invocation, err)
+			report("[%d] %s/%s: cannot create report directory: %v", attempt, step.Tool, step.Invocation, err)
 			return StepResult{Step: step, Target: target, Skipped: true, Error: "create report directory: " + err.Error()}
 		}
 	}
@@ -290,7 +300,7 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 	for _, checked := range scopeChecks(step, values, kind, effectivePort, scheme, urlOption) {
 		if !checkAllowed(plan.Policy, checked) {
 			reason := guardReason(plan.Policy, checked)
-			report("%s/%s: refused, %s", step.Tool, step.Invocation, reason)
+			report("[%d] %s/%s: refused, %s", attempt, step.Tool, step.Invocation, reason)
 			return StepResult{Step: step, Target: target, Skipped: true, Error: "scope denied: " + reason}
 		}
 	}
@@ -306,7 +316,7 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 
 	args := buildArgs(step, values)
 
-	report("round %d %s/%s on %s -> %s", step.Round, step.Tool, step.Invocation, scopeDisplay, strings.Join(args, " "))
+	report("[%d] round %d %s/%s on %s -> %s", attempt, step.Round, step.Tool, step.Invocation, scopeDisplay, strings.Join(args, " "))
 	result, err := e.Execute(ctx, execution.Request{
 		Tool:              step.Tool,
 		Args:              args,
@@ -314,12 +324,13 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		OperationID:       op.ID,
 		Timeout:           op.StepTimeout,
 		ExpectedExitCodes: step.Accepted,
+		Stream:            op.Stream,
 	})
 	stepResult := StepResult{Step: step, Target: target}
 	if err != nil {
 		stepResult.Status = execution.StatusError
 		stepResult.Error = err.Error()
-		report("ERROR %s/%s: %v", step.Tool, step.Invocation, err)
+		report("[%d] ERROR %s/%s on %s: %v", attempt, step.Tool, step.Invocation, scopeDisplay, err)
 		return stepResult
 	}
 
@@ -336,16 +347,24 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 	stepResult.Error = result.Error
 	stepResult.Success = result.Status == execution.StatusSuccess
 
+	report("[%d] %s %s/%s on %s exit=%d duration=%s", attempt, outcomeLabel(result.Status),
+		step.Tool, step.Invocation, scopeDisplay, result.ExitCode, result.Duration.Round(time.Millisecond))
+	if result.Status != execution.StatusSuccess {
+		if result.Error != "" {
+			report("    reason: %s", result.Error)
+		}
+		for _, line := range previewLines(result.StderrPreview, result.StdoutPreview, 6) {
+			report("    | %s", line)
+		}
+	}
+
 	if step.Success != nil {
 		combined := result.StdoutPreview + "\n" + result.StderrPreview + "\n" + stdout + "\n" + stderr
 		if match := step.Success.FindString(combined); match != "" {
 			stepResult.Matches = append(stepResult.Matches, match)
-			report("SUCCESS %s/%s on %s: %s", step.Tool, step.Invocation, scopeDisplay, match)
+			report("    SUCCESS %s/%s on %s: %s", step.Tool, step.Invocation, scopeDisplay, match)
 			stepResult.Success = true
 		}
-	}
-	if result.Status == execution.StatusSuccess && len(stepResult.Matches) == 0 {
-		report("done %s/%s on %s (%s)", step.Tool, step.Invocation, scopeDisplay, result.Duration.Round(time.Millisecond))
 	}
 
 	learned := ParseOutput(step.Tool, stdout+"\n"+result.StdoutPreview+"\n"+reported, stderr+"\n"+result.StderrPreview, values.Host)
@@ -531,4 +550,47 @@ func copiedValues(values map[string]string) map[string]string {
 		copied[key] = value
 	}
 	return copied
+}
+
+// outcomeLabel renders one execution status for the live progress stream.
+func outcomeLabel(status execution.Status) string {
+	switch status {
+	case execution.StatusSuccess:
+		return "OK"
+	case execution.StatusFailed:
+		return "FAIL"
+	case execution.StatusTimeout:
+		return "TIMEOUT"
+	case execution.StatusCanceled:
+		return "CANCELED"
+	default:
+		return "ERROR"
+	}
+}
+
+// previewLines condenses the first lines of stderr (falling back to stdout)
+// so a failed attempt explains itself without dumping the full artifact.
+func previewLines(stderr, stdout string, limit int) []string {
+	text := strings.TrimSpace(stderr)
+	if text == "" {
+		text = strings.TrimSpace(stdout)
+	}
+	if text == "" || limit <= 0 {
+		return nil
+	}
+	lines := make([]string, 0, limit)
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.TrimSpace(strings.TrimRight(raw, "\r\n"))
+		if line == "" {
+			continue
+		}
+		if utf8.RuneCountInString(line) > 240 {
+			line = string([]rune(line)[:240]) + "..."
+		}
+		lines = append(lines, line)
+		if len(lines) == limit {
+			break
+		}
+	}
+	return lines
 }

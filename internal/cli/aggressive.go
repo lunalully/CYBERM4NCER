@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ type aggressiveOptions struct {
 	wordlist  string
 	userList  string
 	passList  string
+	stream    bool
 }
 
 func newAggressiveCmd(opts *rootOptions) *cobra.Command {
@@ -76,6 +78,7 @@ comments (#). Use --max-steps to cap a large campaign (0 is unlimited).`,
 	flags.StringVar(&options.wordlist, "wordlist", "", "web wordlist (default from configuration)")
 	flags.StringVar(&options.userList, "userlist", "", "usernames for hydra/medusa")
 	flags.StringVar(&options.passList, "passlist", "", "passwords for hydra/medusa")
+	flags.BoolVar(&options.stream, "stream", false, "stream tool stdout/stderr live to stderr")
 	return cmd
 }
 
@@ -147,6 +150,9 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 		Timeout: stepTimeout,
 		Printer: printer,
 	}
+	if options.stream {
+		run.Stream = root.streams.Err
+	}
 	campaign := campaignSummary{Targets: len(plans)}
 	started := time.Now()
 	for _, plan := range plans {
@@ -180,17 +186,19 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 		if err := printer.JSONValue(campaign); err != nil {
 			return err
 		}
-	}
-	fmt.Fprintf(root.streams.Out, "\ntargets=%d steps=%d succeeded=%d failed=%d skipped=%d discovered=%d hosts=%d ports=%d elapsed=%s\n",
-		campaign.Targets, campaign.Steps, campaign.Succeeded, campaign.Failed, campaign.Skipped,
-		campaign.Discovered, campaign.Hosts, campaign.Ports, campaign.Elapsed)
-	if campaign.Truncated {
-		fmt.Fprintln(root.streams.Out, "max-steps reached; the campaign stopped early")
-	}
-	if len(campaign.Matches) > 0 {
-		fmt.Fprintln(root.streams.Out, "\ncredential/success matches:")
-		for _, match := range campaign.Matches {
-			fmt.Fprintf(root.streams.Out, "  %s\n", match)
+	} else {
+		fmt.Fprintf(root.streams.Out, "\ntargets=%d steps=%d succeeded=%d failed=%d skipped=%d discovered=%d hosts=%d ports=%d elapsed=%s\n",
+			campaign.Targets, campaign.Steps, campaign.Succeeded, campaign.Failed, campaign.Skipped,
+			campaign.Discovered, campaign.Hosts, campaign.Ports, campaign.Elapsed)
+		if campaign.Truncated {
+			fmt.Fprintln(root.streams.Out, "max-steps reached; the campaign stopped early")
+		}
+		printToolBreakdown(printer, campaign)
+		if len(campaign.Matches) > 0 {
+			fmt.Fprintln(root.streams.Out, "\ncredential/success matches:")
+			for _, match := range campaign.Matches {
+				fmt.Fprintf(root.streams.Out, "  %s\n", match)
+			}
 		}
 	}
 	if campaign.Error != "" {
@@ -223,6 +231,55 @@ type campaignSummary struct {
 	Summaries  []aggressive.Summary `json:"targets_detail"`
 }
 
+// printToolBreakdown summarizes the campaign per tool so the operator sees
+// which tools ran, succeeded, failed or were skipped.
+func printToolBreakdown(printer *ui.Printer, campaign campaignSummary) {
+	type stat struct {
+		runs, ok, failed, skipped int
+		elapsed                   time.Duration
+	}
+	stats := map[string]*stat{}
+	order := make([]string, 0)
+	for _, summary := range campaign.Summaries {
+		for _, result := range summary.Results {
+			tool := result.Step.Tool
+			entry, seen := stats[tool]
+			if !seen {
+				entry = &stat{}
+				stats[tool] = entry
+				order = append(order, tool)
+			}
+			entry.runs++
+			entry.elapsed += result.Duration
+			switch {
+			case result.Skipped:
+				entry.skipped++
+			case result.Success:
+				entry.ok++
+			default:
+				entry.failed++
+			}
+		}
+	}
+	if len(order) == 0 {
+		return
+	}
+	rows := make([][]string, 0, len(order))
+	for _, tool := range order {
+		entry := stats[tool]
+		rows = append(rows, []string{
+			tool,
+			strconv.Itoa(entry.runs),
+			strconv.Itoa(entry.ok),
+			strconv.Itoa(entry.failed),
+			strconv.Itoa(entry.skipped),
+			entry.elapsed.Round(time.Millisecond).String(),
+		})
+	}
+	fmt.Fprintln(printer.Out, "\nby tool:")
+	printer.Table([]string{"TOOL", "RUNS", "OK", "FAIL", "SKIP", "TIME"}, rows)
+}
+
 // aggressiveRun executes one plan at a time with its own operation record.
 type aggressiveRun struct {
 	App     *core.Core
@@ -232,10 +289,16 @@ type aggressiveRun struct {
 	Scope   string
 	Timeout time.Duration
 	Printer *ui.Printer
+	Stream  io.Writer
 }
 
 func (r *aggressiveRun) execute(ctx context.Context, plan *aggressive.Plan) (aggressive.Summary, error) {
-	return r.executeTo(ctx, plan, r.Printer.Out)
+	out := r.Printer.Out
+	if r.Printer.JSON {
+		// Keep stdout reserved for the JSON document.
+		out = r.Printer.Err
+	}
+	return r.executeTo(ctx, plan, out)
 }
 
 // executeTo records the operation and runs it with progress sent to out.
@@ -244,8 +307,12 @@ func (r *aggressiveRun) executeTo(ctx context.Context, plan *aggressive.Plan, ou
 	if err != nil {
 		return aggressive.Summary{}, err
 	}
-	fmt.Fprintf(out, "executing %d planned command(s) against %s (level %d, scope %s)\n",
-		countSteps(plan), plan.Target, r.Mode.Level, r.Scope)
+	scopeLabel := r.Scope
+	if scopeLabel == "" {
+		scopeLabel = "unscoped"
+	}
+	fmt.Fprintf(out, "executing %d planned command(s) against %s (level %d, timeout %s, scope %s)\n",
+		countSteps(plan), plan.Target, r.Mode.Level, r.Timeout.Round(time.Second), scopeLabel)
 	started := time.Now()
 	summary, runErr := r.Service.Run(ctx, plan, aggressive.Operation{
 		ID:          operationID,
@@ -253,6 +320,7 @@ func (r *aggressiveRun) executeTo(ctx context.Context, plan *aggressive.Plan, ou
 		StepTimeout: r.Timeout,
 		MaxSteps:    r.Options.maxSteps,
 		Progress:    out,
+		Stream:      r.Stream,
 	})
 	status := "completed"
 	if runErr != nil {

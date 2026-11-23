@@ -9,6 +9,15 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Live per-attempt progress for `aggressive --execute`: every attempt is
+  numbered and reports status (`OK`, `FAIL`, `TIMEOUT`, `CANCELED`, `ERROR`),
+  real exit code and duration; failures print the engine reason and the first
+  stderr/stdout lines. Discovered hosts, ports and URLs are shown as they are
+  learned, each target ends with a one-line summary and the campaign closes
+  with a per-tool `RUNS/OK/FAIL/SKIP/TIME` table.
+- `aggressive --stream` forwards each tool's raw stdout/stderr live to stderr
+  in addition to the artifact files; `--json` keeps stdout a valid document.
+
 - Operations Hub: interactive terminal menu (`cyberm4ncer` without a command,
   or `cyberm4ncer hub`) with categories mapped to the real aggressive modes,
   tool detection, configuration/scope and operation history.

@@ -14,7 +14,7 @@ capabilities: [misconfiguration_assessment, web_server_scanning]
 outputs: [text, json, csv, xml]
 version_check:
   args: ["-Version"]
-  regex: '(?i)Nikto main\s+([0-9]+\.[0-9]+\.[0-9]+)'
+  regex: '(?i)Nikto(?:\s+main)?\s+v?([0-9]+\.[0-9]+\.[0-9]+)'
 install:
   - method: apt
     package: nikto

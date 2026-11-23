@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -86,6 +87,30 @@ func TestRunSuccessCapturesStreams(t *testing.T) {
 	}
 	if recorder.starts[0].Status != StatusRunning || recorder.finishes[0].Status != StatusSuccess {
 		t.Fatalf("recorder statuses = %s / %s", recorder.starts[0].Status, recorder.finishes[0].Status)
+	}
+}
+
+func TestRunLiveStream(t *testing.T) {
+	runner, _ := newTestRunner(t, nil, nil)
+	var live bytes.Buffer
+	result, err := runner.Run(context.Background(), Request{
+		Tool:   "sh",
+		Args:   []string{"-c", "printf 'live-out'; printf 'live-err' >&2"},
+		Stream: &live,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if result.Status != StatusSuccess {
+		t.Fatalf("status=%s error=%s", result.Status, result.Error)
+	}
+	streamed := live.String()
+	if !strings.Contains(streamed, "live-out") || !strings.Contains(streamed, "live-err") {
+		t.Fatalf("live stream = %q", streamed)
+	}
+	// Live streaming must not disturb the artifact/preview capture.
+	if result.StdoutPreview != "live-out" || result.StderrPreview != "live-err" {
+		t.Fatalf("stdout=%q stderr=%q", result.StdoutPreview, result.StderrPreview)
 	}
 }
 

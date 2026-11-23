@@ -13,8 +13,8 @@ intrusive: true
 capabilities: [directory_enumeration, vhost_discovery, dns_enumeration]
 outputs: [text]
 version_check:
-  args: ["version"]
-  regex: '(?m)^v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)$'
+  args: ["--version"]
+  regex: '(?i)gobuster version\s+v?([0-9]+\.[0-9]+(?:\.[0-9]+)?)'
 install:
   - method: go
     package: github.com/OJ/gobuster/v3@v3.6.0

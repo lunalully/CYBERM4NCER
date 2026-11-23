@@ -14,7 +14,7 @@ capabilities: [banner_grab, port_connect, service_detection, raw_tcp]
 outputs: [text]
 version_check:
   args: ["-h"]
-  regex: '^\[v([0-9]+\.[0-9]+-[0-9]+)\]'
+  regex: '^\[v([0-9]+\.[0-9]+-[0-9]+(?:\.[0-9]+)?)\]'
   accept_exit_codes: [0, 1]
 install:
   - method: apt

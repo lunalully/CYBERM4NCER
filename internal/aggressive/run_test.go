@@ -400,7 +400,7 @@ func TestRunStepSendsHostAndPortSeparately(t *testing.T) {
 		step.Target = "127.0.0.1:445"
 		step.Port = 445
 		step.TargetURL = ""
-		result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, report)
+		result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, 1, report)
 		if result.Error != "" {
 			t.Fatalf("%s: %s", test.tool, result.Error)
 		}
@@ -434,7 +434,7 @@ ports: [8081]
 	executor := &Executor{Execute: performer.run, Registry: registry}
 	step := planStep(t, plan, "ffuf", "dir-enum")
 	var log strings.Builder
-	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, func(format string, args ...any) {
+	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, 1, func(format string, args ...any) {
 		fmt.Fprintf(&log, format+"\n", args...)
 	})
 	if result.Error != "" {
@@ -480,7 +480,7 @@ ports: [445]
 	executor := &Executor{Execute: performer.run, Registry: registry}
 	step := planStep(t, plan, "ffuf", "dir-enum")
 	var log strings.Builder
-	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, func(format string, args ...any) {
+	result := executor.runStep(context.Background(), plan, step, NewCaptures(), Operation{}, "", 0, 1, func(format string, args ...any) {
 		fmt.Fprintf(&log, format+"\n", args...)
 	})
 	if !result.Skipped || !strings.Contains(result.Error, "port 80") {
@@ -515,6 +515,108 @@ func TestExecutorWithoutScopeExecutesAndAuditsNothing(t *testing.T) {
 	for _, result := range summary.Results {
 		if result.Skipped && result.Error != "no captured ports" {
 			t.Fatalf("%s/%s skipped: %s", result.Step.Tool, result.Step.Invocation, result.Error)
+		}
+	}
+}
+
+func TestProgressReportsEveryAttempt(t *testing.T) {
+	registry := fakeRegistry(t, map[string]string{"scanner": "echo scanned; exit 4"}, nil)
+	performer := &fakePerformer{}
+	performer.allowAll = true
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	planner := &Planner{Registry: registry, Mode: Mode{Name: "all", Level: 5, RepeatQuota: 2, IncludeIntrusive: true}}
+	plan, err := planner.Plan("203.0.113.9", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var progress bytes.Buffer
+	summary, err := executor.Run(context.Background(), plan, Operation{Progress: &progress, MaxSteps: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Steps != 2 || summary.Failed != 2 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	output := progress.String()
+	// Every attempt is numbered, so the operator sees each try in order.
+	for _, want := range []string{"[1] round 1 scanner/scan", "[2] round 2 scanner/scan", "[1] FAIL scanner/scan", "[2] FAIL scanner/scan"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("progress missing %q:\n%s", want, output)
+		}
+	}
+	// Failures explain themselves: status, exit code, reason and output preview.
+	if !strings.Contains(output, "exit=0") || !strings.Contains(output, "duration=") {
+		t.Fatalf("progress missing exit code/duration:\n%s", output)
+	}
+	// Tools that exit non-zero report the real code through the runner.
+	if !strings.Contains(output, "FAIL") || !strings.Contains(output, "reason:") {
+		t.Fatalf("progress missing failure details:\n%s", output)
+	}
+	if !strings.Contains(output, "| scanned") {
+		t.Fatalf("progress missing output preview:\n%s", output)
+	}
+	if !strings.Contains(output, "target 203.0.113.9 finished: 2 step(s) - 0 ok, 2 failed") {
+		t.Fatalf("progress missing per-target summary:\n%s", output)
+	}
+}
+
+func TestProgressStreamsToolOutputLive(t *testing.T) {
+	registry := fakeRegistry(t, map[string]string{"scanner": "echo live-output-from-tool"}, nil)
+	performer := &fakePerformer{}
+	performer.allowAll = true
+	executor := &Executor{Execute: performer.run, Registry: registry}
+	planner := &Planner{Registry: registry, Mode: Mode{Name: "recon", Level: 5, RepeatQuota: 1, IncludeIntrusive: true}}
+	plan, err := planner.Plan("203.0.113.9", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var progress, live bytes.Buffer
+	// The fake performer stands in for the core entry point: it must forward
+	// the stream request, exactly like execution.Runner does.
+	streaming := func(ctx context.Context, req execution.Request) (execution.Result, error) {
+		if req.Stream != nil {
+			io.WriteString(req.Stream, "live-output-from-tool\n")
+		}
+		return performer.run(ctx, req)
+	}
+	executor.Execute = streaming
+	if _, err := executor.Run(context.Background(), plan, Operation{Progress: &progress, Stream: &live, MaxSteps: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(live.String(), "live-output-from-tool") {
+		t.Fatalf("live stream empty: %q", live.String())
+	}
+}
+
+func TestPreviewLinesCondensesOutput(t *testing.T) {
+	lines := previewLines("\n\n  first  \n\nsecond\nthird\nfourth\n", "", 2)
+	if len(lines) != 2 || lines[0] != "first" || lines[1] != "second" {
+		t.Fatalf("previewLines = %#v", lines)
+	}
+	// stderr is empty: the stdout preview is used instead.
+	if got := previewLines("", "only-stdout", 3); len(got) != 1 || got[0] != "only-stdout" {
+		t.Fatalf("stdout fallback = %#v", got)
+	}
+	if got := previewLines("", "", 3); got != nil {
+		t.Fatalf("empty preview = %#v", got)
+	}
+	long := strings.Repeat("a", 400)
+	if got := previewLines(long, "", 1); len(got) != 1 || len([]rune(got[0])) != 243 {
+		t.Fatalf("long line not truncated: %d runes", len([]rune(got[0])))
+	}
+}
+
+func TestOutcomeLabel(t *testing.T) {
+	cases := map[execution.Status]string{
+		execution.StatusSuccess:  "OK",
+		execution.StatusFailed:   "FAIL",
+		execution.StatusTimeout:  "TIMEOUT",
+		execution.StatusCanceled: "CANCELED",
+		execution.StatusError:    "ERROR",
+	}
+	for status, want := range cases {
+		if got := outcomeLabel(status); got != want {
+			t.Fatalf("outcomeLabel(%s) = %q, want %q", status, got, want)
 		}
 	}
 }

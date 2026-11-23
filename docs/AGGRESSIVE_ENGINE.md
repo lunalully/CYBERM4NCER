@@ -81,6 +81,7 @@ port they imply (80 for `http`, 443 for `https`) before running.
 | `--no-intrusive` | Skip tools marked intrusive |
 | `--wordlist` | Web wordlist (default `execution.wordlist`) |
 | `--userlist`, `--passlist` | Credential lists for hydra/medusa |
+| `--stream` | Show each tool's raw stdout/stderr live on stderr |
 
 Both guards are opt-out, never opt-in: credential and intrusive tools are
 included by default. Removing them is the operator's explicit choice.
@@ -107,6 +108,36 @@ included by default. Removing them is the operator's explicit choice.
 6. **Reporting.** A campaign summary (targets, steps, succeeded, failed,
    skipped, discovered assets, credential matches, elapsed, truncation) is
    printed and stored.
+
+## Live progress
+
+Every attempt is printed as it happens, numbered in execution order, so a run
+is never silent:
+
+```
+executing 112 planned command(s) against 10.0.0.5 (level 5, timeout 10m0s, scope unscoped)
+[1] round 1 nmap/top-ports on 10.0.0.5 -> -p- --min-rate 5000 -oX - 10.0.0.5
+[1] OK nmap/top-ports on 10.0.0.5 exit=0 duration=41.802s
+  + port 10.0.0.5:22
+  + port 10.0.0.5:8080
+[2] round 1 gobuster/dir-enum on http://10.0.0.5:8080 -> dir -q ... -u http://10.0.0.5:8080
+[2] TIMEOUT gobuster/dir-enum on http://10.0.0.5:8080 exit=-1 duration=10m0s
+    reason: timed out after 10m0s
+    | 2026/01/01 00:00:00 wordlist missing
+```
+
+Each line carries the attempt number, the status (`OK`, `FAIL`, `TIMEOUT`,
+`CANCELED`, `ERROR`), the real exit code and the measured duration. Failures
+add the engine reason plus the first six non-empty lines of stderr (stdout when
+stderr is empty), so a broken tool explains itself without opening the
+artifacts. Discovered hosts, ports and URLs are reported as they are learned,
+and each target ends with a one-line summary. The campaign closes with a
+per-tool table (`RUNS`, `OK`, `FAIL`, `SKIP`, `TIME`).
+
+The progress stream carries the engine's view; `--stream` additionally shows
+the tools' own raw output (including progress bars) on stderr, keeping stdout
+readable or valid JSON. Full streams are always kept in the artifact files and
+every execution remains stored in the database.
 
 ## What is learned
 

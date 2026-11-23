@@ -42,6 +42,9 @@ type Request struct {
 	// code. When set, those codes produce StatusSuccess; anything else still
 	// fails.
 	ExpectedExitCodes []int
+	// Stream, when set, receives the process stdout and stderr as they are
+	// produced, in addition to the artifact files and preview buffers.
+	Stream io.Writer
 }
 
 // Result is the outcome of an execution.
@@ -254,11 +257,21 @@ func (r *Runner) Run(ctx context.Context, req Request) (Result, error) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	stdoutTargets := []io.Writer{stdoutFile, stdoutPreview}
+	stderrTargets := []io.Writer{stderrFile, stderrPreview}
+	if req.Stream != nil {
+		// stdout and stderr are copied by separate goroutines; one mutex keeps
+		// the live stream readable and a broken terminal never fails the run.
+		live := &liveWriter{dst: req.Stream}
+		stdoutTargets = append(stdoutTargets, live)
+		stderrTargets = append(stderrTargets, live)
+	}
+
 	cmd := exec.CommandContext(runCtx, path, req.Args...)
 	cmd.Env = append(os.Environ(), req.Env...)
 	cmd.Dir = req.WorkDir
-	cmd.Stdout = io.MultiWriter(stdoutFile, stdoutPreview)
-	cmd.Stderr = io.MultiWriter(stderrFile, stderrPreview)
+	cmd.Stdout = io.MultiWriter(stdoutTargets...)
+	cmd.Stderr = io.MultiWriter(stderrTargets...)
 	configureProcess(cmd)
 	cmd.Cancel = func() error { return killProcessGroup(cmd.Process) }
 	cmd.WaitDelay = 3 * time.Second
