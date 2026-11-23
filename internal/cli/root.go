@@ -99,7 +99,9 @@ explicit scope file before a module can run.`,
 		newScopeCmd(opts),
 		newToolsCmd(opts),
 		newAggressiveCmd(opts),
+		hubCommand(opts),
 	)
+	attachHub(root, opts)
 	return root
 }
 

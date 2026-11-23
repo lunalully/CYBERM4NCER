@@ -19,6 +19,7 @@ exists:
 
 | Capability | Status |
 |---|---|
+| Operations Hub (interactive menu, header banner, session context) | Implemented |
 | CLI, configuration, logging | Implemented |
 | SQLite persistence and migrations | Implemented |
 | Tamper-evident audit log | Implemented |
@@ -68,6 +69,8 @@ installation details.
 ## Quick start
 
 ```bash
+cyberm4ncer                       # interactive Operations Hub (terminal)
+cyberm4ncer hub --scope engagement.yaml
 cyberm4ncer doctor
 cyberm4ncer config init
 cyberm4ncer config show

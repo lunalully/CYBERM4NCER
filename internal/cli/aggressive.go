@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -234,11 +235,16 @@ type aggressiveRun struct {
 }
 
 func (r *aggressiveRun) execute(ctx context.Context, plan *aggressive.Plan) (aggressive.Summary, error) {
+	return r.executeTo(ctx, plan, r.Printer.Out)
+}
+
+// executeTo records the operation and runs it with progress sent to out.
+func (r *aggressiveRun) executeTo(ctx context.Context, plan *aggressive.Plan, out io.Writer) (aggressive.Summary, error) {
 	projectID, operationID, err := r.recordPlan(ctx, plan)
 	if err != nil {
 		return aggressive.Summary{}, err
 	}
-	fmt.Fprintf(r.Printer.Out, "executing %d planned command(s) against %s (level %d, scope %s)\n",
+	fmt.Fprintf(out, "executing %d planned command(s) against %s (level %d, scope %s)\n",
 		countSteps(plan), plan.Target, r.Mode.Level, r.Scope)
 	started := time.Now()
 	summary, runErr := r.Service.Run(ctx, plan, aggressive.Operation{
@@ -246,7 +252,7 @@ func (r *aggressiveRun) execute(ctx context.Context, plan *aggressive.Plan) (agg
 		DataDir:     r.App.Paths.DataDir,
 		StepTimeout: r.Timeout,
 		MaxSteps:    r.Options.maxSteps,
-		Progress:    r.Printer.Out,
+		Progress:    out,
 	})
 	status := "completed"
 	if runErr != nil {

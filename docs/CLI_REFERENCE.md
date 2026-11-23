@@ -94,6 +94,14 @@ Install methods are metadata only in 0.1.0.
 Runs version detection for all manifests or the named tools. Exit code 1 if any
 tool is missing, incompatible or unverified.
 
+### `cyberm4ncer` (no command) / `cyberm4ncer hub`
+
+Opens the interactive Operations Hub in a terminal (see
+[`OPERATIONS_HUB.md`](OPERATIONS_HUB.md)). Without a terminal the header and
+help are printed instead. `hub` accepts the same defaults as `aggressive`
+(`--scope`, `--mode`, `--level`, `--repeat`, `--timeout`, `--wordlist`,
+`--userlist`, `--passlist`, `--file`) plus optional positional targets.
+
 ### `cyberm4ncer aggressive [targets...]`
 
 Plans (default) or runs the exhaustive repeated scan described in

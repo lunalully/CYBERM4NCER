@@ -6,6 +6,9 @@ não passares, o scan corre contra o alvo que deres.
 
 ## 0. Compilar e ver se está tudo bem
 
+Modo interativo (menu): basta correr `./dist/cyberm4ncer` num terminal.
+Ver [`OPERATIONS_HUB.md`](OPERATIONS_HUB.md) para os detalhes.
+
 ```bash
 cd ~/CYBERM4NCER
 make build                 # cria ./dist/cyberm4ncer

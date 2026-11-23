@@ -19,6 +19,10 @@ const (
 	colorGreen  = "\x1b[32m"
 	colorYellow = "\x1b[33m"
 	colorCyan   = "\x1b[36m"
+	// colorAccent and colorViolet give the interface its neon purple
+	// identity (256-color SGR, widely supported by Linux terminals).
+	colorAccent = "\x1b[38;5;135m"
+	colorViolet = "\x1b[38;5;165m"
 )
 
 // Printer writes human or JSON output. It never writes colored output when
@@ -62,6 +66,27 @@ func (p *Printer) paint(code, value string) string {
 		return value
 	}
 	return code + value + colorReset
+}
+
+// Paint colors a token with the interface accent (neon purple).
+func (p *Printer) Paint(token string) string {
+	return p.paint(colorAccent+colorBold, token)
+}
+
+// Reset re-emits the default style so a value inside a painted prompt is not
+// shown in the accent color.
+func (p *Printer) Reset(text string) string {
+	return p.paint("", text)
+}
+
+// Violet paints a string with the bright neon purple accent.
+func (p *Printer) Violet(text string) string {
+	return p.paint(colorViolet+colorBold, text)
+}
+
+// DimText paints a string with the muted color.
+func (p *Printer) DimText(text string) string {
+	return p.paint(colorDim, text)
 }
 
 // Title prints a section title.

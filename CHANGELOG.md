@@ -7,6 +7,16 @@ Versioning: [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Operations Hub: interactive terminal menu (`cyberm4ncer` without a command,
+  or `cyberm4ncer hub`) with categories mapped to the real aggressive modes,
+  tool detection, configuration/scope and operation history.
+- Neon violet block-letter startup header (`internal/banner`), centered on
+  wide terminals and rendered as plain text without color support.
+- Session context shared between screens (targets, scope, mode, level) and
+  explicit confirmation before every run.
+
 ### Changed
 
 - The scope is optional. `aggressive` runs against a host, IP, URL or any
