@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -21,10 +22,13 @@ type StepResult struct {
 	Step        Step
 	Target      string
 	ExecutionID string
-	Status      execution.Status
-	ExitCode    int
-	Duration    time.Duration
-	Error       string
+	// Slot is the schedule position of the step, used to keep the report in
+	// plan order when steps run in parallel.
+	Slot     int `json:"slot,omitempty"`
+	Status   execution.Status
+	ExitCode int
+	Duration time.Duration
+	Error    string
 	// Success is true when the command completed and, for credential
 	// invocations, the success regex matched (when configured).
 	Success bool
@@ -54,6 +58,9 @@ type Operation struct {
 	// Stream receives the live stdout and stderr of every process in
 	// addition to the artifact files; may be nil.
 	Stream io.Writer
+	// Workers is how many steps may run at the same time. Zero or one keeps
+	// the historical one-at-a-time behaviour.
+	Workers int
 }
 
 // Summary is the final report of a run.
@@ -69,6 +76,13 @@ type Summary struct {
 	Results    []StepResult `json:"results,omitempty"`
 	// Truncated reports that MaxSteps stopped the run early.
 	Truncated bool `json:"truncated,omitempty"`
+	// Workers is how many steps ran in parallel (1 means sequential).
+	Workers int `json:"workers,omitempty"`
+	// Wall is the elapsed time of the whole plan.
+	Wall time.Duration `json:"wall"`
+	// Busy is the summed duration of every executed step; Wall/Busy shows
+	// how much the workers overlapped.
+	Busy time.Duration `json:"busy"`
 }
 
 // Executor runs a plan through the scoped execution function.
@@ -82,6 +96,11 @@ type Executor struct {
 
 // Run expands and executes the plan. Port-dependent steps run once per
 // captured open port for each planned round.
+//
+// Steps of the same round are independent, so they run in parallel up to
+// op.Workers. Rounds are separated by a barrier: a port discovered in round N
+// is only expanded in round N+1, exactly like the sequential loop this
+// replaces. Captures are shared and thread-safe.
 func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, error) {
 	if e == nil || e.Execute == nil {
 		return Summary{}, fmt.Errorf("executor requires a scoped execution function")
@@ -89,14 +108,21 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 	if plan == nil {
 		return Summary{}, fmt.Errorf("plan is required")
 	}
+	workers := op.Workers
+	if workers < 1 {
+		workers = 1
+	}
 	captures := NewCaptures()
 	base := baseContext(plan.Target)
 	if base.Host != "" {
 		captures.AddHost(base.Host)
 	}
+	// Parallel workers report concurrently: a single locked writer keeps
+	// progress lines from interleaving mid-line.
+	progress := &syncWriter{dst: op.Progress}
 	report := func(format string, args ...any) {
-		if op.Progress != nil {
-			fmt.Fprintf(op.Progress, format+"\n", args...)
+		if progress.dst != nil {
+			fmt.Fprintf(progress, format+"\n", args...)
 		}
 	}
 	maxRead := op.MaxReadBytes
@@ -108,20 +134,46 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 		artifactRoot = op.DataDir + "/artifacts"
 	}
 
-	summary := Summary{}
-	limitReached := func() bool {
-		if op.MaxSteps > 0 && summary.Steps >= op.MaxSteps {
-			summary.Truncated = true
-			report("max-steps %d reached; remaining invocations were not scheduled", op.MaxSteps)
+	summary := Summary{Workers: workers}
+	started := time.Now()
+	// steps counts scheduled executions for the MaxSteps cap. It must be
+	// decided before a step starts, never after, or a parallel burst would
+	// overshoot the cap. The caller holds mu while calling capReached and
+	// announces the truncation itself, outside the lock.
+	var mu sync.Mutex
+	// results holds one slot per scheduled step so the report keeps the
+	// schedule order even when steps finish out of order.
+	results := make([]StepResult, 0, len(plan.Steps))
+	scheduled := 0
+	capReached := func() bool {
+		return op.MaxSteps > 0 && scheduled >= op.MaxSteps
+	}
+	truncated := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return summary.Truncated
+	}
+	announceTruncation := func() bool {
+		mu.Lock()
+		if summary.Truncated {
+			mu.Unlock()
 			return true
 		}
-		return false
+		summary.Truncated = true
+		mu.Unlock()
+		report("max-steps %d reached; remaining invocations were not scheduled", op.MaxSteps)
+		return true
 	}
 	record := func(result StepResult) {
-		summary.Results = append(summary.Results, result)
+		mu.Lock()
+		defer mu.Unlock()
+		if result.Slot >= 0 && result.Slot < len(results) {
+			results[result.Slot] = result
+		}
 		summary.Steps++
 		summary.Discovered += result.Discovered
 		summary.Matches = append(summary.Matches, result.Matches...)
+		summary.Busy += result.Duration
 		switch {
 		case result.Skipped:
 			summary.Skipped++
@@ -132,68 +184,125 @@ func (e *Executor) Run(ctx context.Context, plan *Plan, op Operation) (Summary, 
 		}
 	}
 
+	// runBatch executes independent steps with a bounded number of workers
+	// and returns once every one of them finished. The caller treats the
+	// return as a barrier.
+	runBatch := func(steps []Step) bool {
+		if len(steps) == 0 {
+			return false
+		}
+		var wg sync.WaitGroup
+		slots := make(chan struct{}, workers)
+		stopped := false
+		for _, step := range steps {
+			if ctx.Err() != nil {
+				break
+			}
+			mu.Lock()
+			capped := capReached()
+			if !capped {
+				scheduled++
+			}
+			attempt := scheduled
+			if !capped {
+				results = append(results, StepResult{})
+			}
+			mu.Unlock()
+			if capped {
+				stopped = true
+				announceTruncation()
+				break
+			}
+			wg.Add(1)
+			slots <- struct{}{}
+			go func(step Step, attempt, slot int) {
+				defer wg.Done()
+				defer func() { <-slots }()
+				result := e.runStep(ctx, plan, step, captures, op, artifactRoot, maxRead, attempt, report)
+				result.Slot = slot
+				record(result)
+			}(step, attempt, attempt-1)
+		}
+		wg.Wait()
+		return stopped
+	}
+
+	// Round 0: every step that does not consume captured ports.
+	batch := make([]Step, 0, len(plan.Steps))
 	var expansions []Step
-	attempts := 0
 	for _, step := range plan.Steps {
 		if step.Expand {
 			expansions = append(expansions, step)
 			continue
 		}
-		if limitReached() {
-			break
-		}
-		// Each round of a discovery step re-scans and can find new assets.
-		attempts++
-		record(e.runStep(ctx, plan, step, captures, op, artifactRoot, maxRead, attempts, report))
+		batch = append(batch, step)
 	}
+	runBatch(batch)
+
 	// Port-dependent steps run once per captured open port for each planned
-	// round.
+	// round. The barrier above guarantees a discovery step in this round has
+	// already finished before its ports are expanded.
 	maxRound := 0
 	for _, step := range expansions {
 		if step.Round > maxRound {
 			maxRound = step.Round
 		}
 	}
-	for round := 1; round <= maxRound && !summary.Truncated; round++ {
+	for round := 1; round <= maxRound && !truncated(); round++ {
 		for _, step := range expansions {
 			if step.Round != round {
 				continue
 			}
-			if limitReached() {
+			// The MaxSteps cap guards scheduled executions. Asking before the
+			// expansion keeps the historical behaviour: a cap reached during
+			// round 0 stops the expansion from starting a new batch.
+			mu.Lock()
+			capped := capReached()
+			mu.Unlock()
+			if capped {
+				announceTruncation()
 				break
 			}
-			pairs := scopePairs(plan, captures)
+			// Every expansion must be an open port: a capture learned from
+			// unrelated output must never trigger a connection attempt.
+			pairs := filterOpen(captures, scopePairs(plan, captures))
 			if len(pairs) == 0 {
 				report("%s/%s: no open ports captured; skipped", step.Tool, step.Invocation)
 				record(StepResult{Step: step, Skipped: true, Error: "no captured ports"})
 				continue
 			}
-			// Every expansion must be an open port: a capture learned from
-			// unrelated output must never trigger a connection attempt.
-			pairs = filterOpen(captures, pairs)
+			expandedBatch := make([]Step, 0, len(pairs))
 			for _, pair := range pairs {
-				if limitReached() {
-					break
-				}
-				host, port := splitHostPortLoose(pair)
-				_ = host
 				expanded := step
 				expanded.Target = pair
+				_, port := splitHostPortLoose(pair)
 				expanded.Port = port
 				expanded.TargetURL = ""
-				attempts++
-				record(e.runStep(ctx, plan, expanded, captures, op, artifactRoot, maxRead, attempts, report))
+				expandedBatch = append(expandedBatch, expanded)
+			}
+			if runBatch(expandedBatch) {
+				break
 			}
 		}
 	}
 
+	summary.Wall = time.Since(started)
 	summary.Hosts = captures.HostCount()
+	// Drop the slots that were reserved but never scheduled (max-steps hit).
+	filled := make([]StepResult, 0, len(results))
+	for _, result := range results {
+		if result.Step.Tool != "" || result.Skipped {
+			filled = append(filled, result)
+		}
+	}
+	summary.Results = filled
 	summary.Ports = captures.PortCount()
 	if len(summary.Matches) > 0 {
 		report("note: %d credential/success match(es) found", len(summary.Matches))
 	}
-	report("target %s finished: %d step(s) - %d ok, %d failed, %d skipped, %d discovered",
-		plan.Target, summary.Steps, summary.Succeeded, summary.Failed, summary.Skipped, summary.Discovered)
+	report("target %s finished: %d step(s) - %d ok, %d failed, %d skipped, %d discovered (workers=%d, wall=%s, busy=%s)",
+		plan.Target, summary.Steps, summary.Succeeded, summary.Failed, summary.Skipped, summary.Discovered,
+		summary.Workers, summary.Wall.Round(time.Millisecond), summary.Busy.Round(time.Millisecond))
 	return summary, nil
 }
 
@@ -317,6 +426,7 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 	args := buildArgs(step, values)
 
 	report("[%d] round %d %s/%s on %s -> %s", attempt, step.Round, step.Tool, step.Invocation, scopeDisplay, strings.Join(args, " "))
+	execStarted := time.Now()
 	result, err := e.Execute(ctx, execution.Request{
 		Tool:              step.Tool,
 		Args:              args,
@@ -325,8 +435,11 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 		Timeout:           op.StepTimeout,
 		ExpectedExitCodes: step.Accepted,
 		Stream:            op.Stream,
+		// Parallel steps share one terminal: tag every line with the tool
+		// and attempt so the reader knows which process produced it.
+		StreamPrefix: fmt.Sprintf("[%d %s] ", attempt, step.Tool),
 	})
-	stepResult := StepResult{Step: step, Target: target}
+	stepResult := StepResult{Step: step, Target: target, Duration: result.Duration}
 	if err != nil {
 		stepResult.Status = execution.StatusError
 		stepResult.Error = err.Error()
@@ -343,12 +456,17 @@ func (e *Executor) runStep(ctx context.Context, plan *Plan, step Step, captures 
 	stepResult.ExecutionID = result.ID
 	stepResult.Status = result.Status
 	stepResult.ExitCode = result.ExitCode
+	// The runner measures the process; fall back to the measured wall time so
+	// the busy metric is never silently zero.
 	stepResult.Duration = result.Duration
+	if stepResult.Duration <= 0 {
+		stepResult.Duration = time.Since(execStarted)
+	}
 	stepResult.Error = result.Error
 	stepResult.Success = result.Status == execution.StatusSuccess
 
 	report("[%d] %s %s/%s on %s exit=%d duration=%s", attempt, outcomeLabel(result.Status),
-		step.Tool, step.Invocation, scopeDisplay, result.ExitCode, result.Duration.Round(time.Millisecond))
+		step.Tool, step.Invocation, scopeDisplay, result.ExitCode, stepResult.Duration.Round(time.Millisecond))
 	if result.Status != execution.StatusSuccess {
 		if result.Error != "" {
 			report("    reason: %s", result.Error)

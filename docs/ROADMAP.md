@@ -25,7 +25,8 @@ code, tests and documentation are present and the repository checks pass.
 - [x] Operation and audit records for every run
 - [x] Multiple targets per run and `--max-steps` campaign cap
 - [x] Wordlist/credential list plumbing (`--wordlist`, `--userlist`, `--passlist`)
-- [ ] Concurrent execution and resume
+- [x] Concurrent execution (`--workers`, measured `overlap`)
+- [ ] Resume of an interrupted run
 - [ ] Per-tool result parsers (Result Engine)
 
 ## 0.3.0 — Tool Manager (next phase)

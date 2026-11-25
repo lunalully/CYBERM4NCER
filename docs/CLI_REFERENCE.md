@@ -124,14 +124,43 @@ per-port fan-out.
 | `--no-intrusive` | Skip intrusive tools |
 | `--wordlist` | Web wordlist (default `execution.wordlist`) |
 | `--userlist`, `--passlist` | Credential lists for hydra/medusa |
-| `--stream` | Stream each tool's stdout/stderr live to stderr |
+| `--stream` | Stream each tool's stdout/stderr live to stderr, one tagged line per process |
+| `--workers` | Parallel steps (0 uses `execution.workers`; 1 is sequential) |
 
 Exit codes: 0 success or plan-only, 1 error or scope denial, 130 interrupted.
 `--json` prints the plan or the campaign summary as JSON.
 
+### Parallel execution
+
+Steps of the same round are independent and run in parallel up to the worker
+limit. Rounds are separated by a barrier: a port discovered in round N is only
+expanded in round N+1, never while that round is still running. Credential
+lists, scope checks, `--max-steps` and the audit trail behave exactly as in a
+sequential run.
+
+The campaign summary reports the measurement instead of an estimate:
+
 ```
-cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml
+targets=1 steps=44 succeeded=39 failed=1 skipped=4 discovered=1 hosts=1 ports=0 elapsed=2.058s
+workers=4 busy=7.957s overlap=3.9x
+```
+
+`busy` is the summed time of every step and `overlap` is `busy/elapsed`: 1.0x
+means nothing ran concurrently. `execution.workers` is validated between 1 and
+256; `--workers 1` reproduces the historical sequential order exactly.
+
+With `--stream`, each line is prefixed with the attempt number and tool so
+parallel output stays attributable:
+
+```
+[4] round 1 httpx/probe on http://10.0.0.5 -> -silent -td -json -u http://10.0.0.5
+[4 httpx] {"url":"http://10.0.0.5","status_code":200}
+[4] OK httpx/probe on http://10.0.0.5 exit=0 duration=155ms
+```
+
+```
 cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute
+cyberm4ncer aggressive 10.0.0.5 --scope engagement.yaml --execute --workers 8 --stream
 cyberm4ncer aggressive https://app.example.com -s engagement.yaml --mode enum --repeat 3 --execute
 cyberm4ncer aggressive --file targets.txt -s engagement.yaml --max-steps 200 --execute
 ```
