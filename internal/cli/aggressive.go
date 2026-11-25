@@ -33,6 +33,7 @@ type aggressiveOptions struct {
 	wordlist  string
 	userList  string
 	passList  string
+	workers   int
 	stream    bool
 }
 
@@ -78,6 +79,7 @@ comments (#). Use --max-steps to cap a large campaign (0 is unlimited).`,
 	flags.StringVar(&options.wordlist, "wordlist", "", "web wordlist (default from configuration)")
 	flags.StringVar(&options.userList, "userlist", "", "usernames for hydra/medusa")
 	flags.StringVar(&options.passList, "passlist", "", "passwords for hydra/medusa")
+	flags.IntVar(&options.workers, "workers", 0, "parallel steps (0 uses execution.workers from the configuration)")
 	flags.BoolVar(&options.stream, "stream", false, "stream tool stdout/stderr live to stderr")
 	return cmd
 }
@@ -149,6 +151,7 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 		Scope:   scopePath,
 		Timeout: stepTimeout,
 		Printer: printer,
+		Workers: workersFor(options, app),
 	}
 	if options.stream {
 		run.Stream = root.streams.Err
@@ -170,6 +173,10 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 		campaign.Hosts += summary.Hosts
 		campaign.Ports += summary.Ports
 		campaign.Matches = append(campaign.Matches, summary.Matches...)
+		campaign.Busy += summary.Busy
+		if summary.Workers > campaign.Workers {
+			campaign.Workers = summary.Workers
+		}
 		campaign.Truncated = campaign.Truncated || summary.Truncated
 		if runErr != nil {
 			if campaign.Error == "" {
@@ -190,6 +197,9 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 		fmt.Fprintf(root.streams.Out, "\ntargets=%d steps=%d succeeded=%d failed=%d skipped=%d discovered=%d hosts=%d ports=%d elapsed=%s\n",
 			campaign.Targets, campaign.Steps, campaign.Succeeded, campaign.Failed, campaign.Skipped,
 			campaign.Discovered, campaign.Hosts, campaign.Ports, campaign.Elapsed)
+		if speed := campaignSpeed(campaign); speed != "" {
+			fmt.Fprintf(root.streams.Out, "%s\n", speed)
+		}
 		if campaign.Truncated {
 			fmt.Fprintln(root.streams.Out, "max-steps reached; the campaign stopped early")
 		}
@@ -214,6 +224,18 @@ func runAggressive(ctx context.Context, root *rootOptions, options *aggressiveOp
 // on stderr and in the database.
 var errCampaignFailed = errors.New("aggressive campaign finished with errors")
 
+// workersFor resolves the parallelism of a campaign: the flag wins, then the
+// configuration, and 1 means the historical sequential behaviour.
+func workersFor(options *aggressiveOptions, app *core.Core) int {
+	if options.workers > 0 {
+		return options.workers
+	}
+	if app != nil && app.Config.Execution.Workers > 0 {
+		return app.Config.Execution.Workers
+	}
+	return 1
+}
+
 // campaignSummary aggregates every target of one command invocation.
 type campaignSummary struct {
 	Targets    int                  `json:"targets"`
@@ -229,6 +251,26 @@ type campaignSummary struct {
 	Elapsed    string               `json:"elapsed"`
 	Error      string               `json:"error,omitempty"`
 	Summaries  []aggressive.Summary `json:"targets_detail"`
+	// Workers is the parallelism used and Busy the summed step time. The
+	// ratio Busy/Elapsed shows how much work overlapped.
+	Workers int           `json:"workers,omitempty"`
+	Busy    time.Duration `json:"busy"`
+}
+
+// campaignSpeed renders the parallelism line shown after the campaign totals.
+// It reports the measured overlap instead of an estimate, so the operator can
+// see whether the workers actually helped.
+func campaignSpeed(campaign campaignSummary) string {
+	if campaign.Workers <= 1 && campaign.Busy == 0 {
+		return ""
+	}
+	wall, err := time.ParseDuration(campaign.Elapsed)
+	if err != nil || wall <= 0 || campaign.Busy <= 0 {
+		return ""
+	}
+	overlap := float64(campaign.Busy) / float64(wall)
+	return fmt.Sprintf("workers=%d busy=%s overlap=%.1fx",
+		campaign.Workers, campaign.Busy.Round(time.Millisecond), overlap)
 }
 
 // printToolBreakdown summarizes the campaign per tool so the operator sees
@@ -290,6 +332,8 @@ type aggressiveRun struct {
 	Timeout time.Duration
 	Printer *ui.Printer
 	Stream  io.Writer
+	// Workers is how many steps run in parallel (0 uses the configuration).
+	Workers int
 }
 
 func (r *aggressiveRun) execute(ctx context.Context, plan *aggressive.Plan) (aggressive.Summary, error) {
@@ -321,6 +365,7 @@ func (r *aggressiveRun) executeTo(ctx context.Context, plan *aggressive.Plan, ou
 		MaxSteps:    r.Options.maxSteps,
 		Progress:    out,
 		Stream:      r.Stream,
+		Workers:     r.Workers,
 	})
 	status := "completed"
 	if runErr != nil {

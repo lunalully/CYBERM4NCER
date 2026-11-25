@@ -45,6 +45,9 @@ type Request struct {
 	// Stream, when set, receives the process stdout and stderr as they are
 	// produced, in addition to the artifact files and preview buffers.
 	Stream io.Writer
+	// StreamPrefix, when set with Stream, tags every streamed line so parallel
+	// executions stay attributable in a shared terminal.
+	StreamPrefix string
 }
 
 // Result is the outcome of an execution.
@@ -259,10 +262,12 @@ func (r *Runner) Run(ctx context.Context, req Request) (Result, error) {
 
 	stdoutTargets := []io.Writer{stdoutFile, stdoutPreview}
 	stderrTargets := []io.Writer{stderrFile, stderrPreview}
+	var live *liveWriter
 	if req.Stream != nil {
-		// stdout and stderr are copied by separate goroutines; one mutex keeps
-		// the live stream readable and a broken terminal never fails the run.
-		live := &liveWriter{dst: req.Stream}
+		// stdout and stderr are copied by separate goroutines; the lock is
+		// shared with every other concurrent execution writing to the same
+		// destination, so lines never interleave.
+		live = newLiveWriter(req.Stream, req.StreamPrefix)
 		stdoutTargets = append(stdoutTargets, live)
 		stderrTargets = append(stderrTargets, live)
 	}
@@ -357,6 +362,8 @@ func (r *Runner) Run(ctx context.Context, req Request) (Result, error) {
 	}
 	closeWarnings := closeStreams(stdoutWriter, stderrWriter)
 	result.Warnings = append(result.Warnings, closeWarnings...)
+	// Emit any unterminated last line so the user sees it before the status.
+	live.Flush()
 
 	record.Status = result.Status
 	record.ExitCode = result.ExitCode
